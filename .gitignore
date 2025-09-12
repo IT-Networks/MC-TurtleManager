@@ -1,0 +1,50 @@
+# Unity3D generated folders
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+UserSettings/
+MemoryCaptures/
+
+# Unity3D auto-generated files
+*.pidb
+*.suo
+*.user
+*.userprefs
+*.unityproj
+*.booproj
+*.svd
+
+# Unity3D crash reports
+CrashReports/
+
+# Unity3D asset meta data
+*.unitypackage
+
+# Visual Studio cache
+.vs/
+
+# MonoDevelop cache
+*.pidb
+*.userprefs
+
+# Unity3D Collaborate
+.collabignore
+
+# Unity3D generated files
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+
+# Unity3D build folders
+Build/
+Builds/
