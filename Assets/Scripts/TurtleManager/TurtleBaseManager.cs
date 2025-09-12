@@ -1,0 +1,289 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.Networking;
+
+/// <summary>
+/// Base turtle management system - handles communication, status, and command queue
+/// </summary>
+public class TurtleBaseManager : MonoBehaviour
+{
+    [Header("Server Settings")]
+    public string turtleCommandUrl = "http://192.168.178.211:4999/command";
+    public string turtleStatusUrl = "http://192.168.178.211:4999/status";
+
+    [Header("Command Settings")]
+    public float commandDelay = 2.1f;
+    public int maxRetries = 3;
+    public bool debugCommands = true;
+
+    [Header("Turtle Settings")]
+    public string defaultTurtleId = "TurtleSlave";
+    public float positionUpdateDelay = 0.5f;
+
+    // Core state
+    protected Queue<TurtleCommand> commandQueue = new Queue<TurtleCommand>();
+    protected bool isExecutingCommands = false;
+    protected TurtleStatus currentTurtleStatus;
+    public TurtleWorldManager worldManager;
+
+    // Events
+    public System.Action<string> OnCommandExecuted;
+    public System.Action<string> OnCommandFailed;
+    public System.Action<TurtleStatus> OnStatusUpdated;
+
+    protected virtual void Start()
+    {
+        worldManager = GetComponent<TurtleWorldManager>() ?? FindFirstObjectByType<TurtleWorldManager>();
+        StartCoroutine(UpdateTurtleStatus());
+        StartCoroutine(ProcessCommandQueue());
+    }
+
+    #region Status Management
+
+    protected IEnumerator UpdateTurtleStatus()
+    {
+        while (true)
+        {
+            yield return StartCoroutine(FetchTurtleStatus());
+            yield return new WaitForSeconds(1f);
+        }
+    }
+
+    protected IEnumerator FetchTurtleStatus()
+    {
+        using UnityWebRequest request = UnityWebRequest.Get(turtleStatusUrl + "/" + defaultTurtleId);
+        yield return request.SendWebRequest();
+
+        if (request.result == UnityWebRequest.Result.Success)
+        {
+            try
+            {
+                var statusWrapper = JsonUtility.FromJson<TurtleWorldManager.StatusWrapper>(
+                    "{\"entries\":[" + request.downloadHandler.text + "]}");
+                    
+                if (statusWrapper?.entries != null && statusWrapper.entries.Count > 0)
+                {
+                    var status = statusWrapper.entries[0];
+                    var newStatus = new TurtleStatus
+                    {
+                        label = status.label,
+                        direction = status.direction,
+                        position = new Position { 
+                            x = -(int)status.position.x - 1, 
+                            y = (int)status.position.y + 128, 
+                            z = (int)status.position.z 
+                        },
+                        fuelLevel = 1000,
+                        isBusy = false
+                    };
+
+                    if (HasStatusChanged(currentTurtleStatus, newStatus))
+                    {
+                        currentTurtleStatus = newStatus;
+                        OnStatusUpdated?.Invoke(currentTurtleStatus);
+                        
+                        if (debugCommands)
+                        {
+                            Debug.Log($"Turtle Status Update: Pos({currentTurtleStatus.position.x}, " +
+                                     $"{currentTurtleStatus.position.y}, {currentTurtleStatus.position.z}), " +
+                                     $"Facing: {currentTurtleStatus.direction}");
+                        }
+                    }
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"Failed to parse turtle status: {ex.Message}");
+            }
+        }
+    }
+
+    private bool HasStatusChanged(TurtleStatus old, TurtleStatus newStatus)
+    {
+        if (old == null) return true;
+        
+        return old.position.x != newStatus.position.x ||
+               old.position.y != newStatus.position.y ||
+               old.position.z != newStatus.position.z ||
+               old.direction != newStatus.direction;
+    }
+
+    #endregion
+
+    #region Command Processing
+
+    protected IEnumerator ProcessCommandQueue()
+    {
+        while (true)
+        {
+            if (commandQueue.Count > 0 && !isExecutingCommands)
+            {
+                isExecutingCommands = true;
+                TurtleCommand command = commandQueue.Dequeue();
+
+                yield return StartCoroutine(ExecuteCommand(command));
+
+                yield return new WaitForSeconds(commandDelay);
+                isExecutingCommands = false;
+            }
+            else
+            {
+                yield return new WaitForSeconds(0.1f);
+            }
+        }
+    }
+
+    protected IEnumerator ExecuteCommand(TurtleCommand command)
+    {
+        if (debugCommands)
+        {
+            Debug.Log($"Executing command: {command.command} for {command.turtleId}");
+        }
+
+        var commandData = new CommandData
+        {
+            label = command.turtleId,
+            commands = new string[] { command.command }
+        };
+
+        string jsonData = JsonUtility.ToJson(commandData);
+
+        using UnityWebRequest request = UnityWebRequest.Post(turtleCommandUrl, jsonData, "application/json");
+        yield return request.SendWebRequest();
+
+        if (request.result == UnityWebRequest.Result.Success)
+        {
+            OnCommandExecuted?.Invoke(command.command);
+            
+            if (IsMovementCommand(command.command))
+            {
+                yield return new WaitForSeconds(positionUpdateDelay);
+                yield return StartCoroutine(FetchTurtleStatus());
+            }
+            
+            if (debugCommands)
+            {
+                Debug.Log($"Command executed: {command.command}");
+            }
+        }
+        else
+        {
+            command.retryCount++;
+            if (command.retryCount < maxRetries)
+            {
+                Debug.LogWarning($"Command failed, retrying ({command.retryCount}/{maxRetries}): {command.command}");
+                commandQueue.Enqueue(command);
+            }
+            else
+            {
+                OnCommandFailed?.Invoke(command.command);
+                Debug.LogError($"Command failed after {maxRetries} attempts: {command.command} - {request.error}");
+            }
+        }
+    }
+
+    protected bool IsMovementCommand(string command)
+    {
+        return command == "forward" || command == "back" || 
+               command == "up" || command == "down" ||
+               command == "left" || command == "right";
+    }
+
+    #endregion
+
+    #region Public API
+
+    public void QueueCommand(TurtleCommand command)
+    {
+        commandQueue.Enqueue(command);
+    }
+
+    public void ClearCommandQueue()
+    {
+        commandQueue.Clear();
+    }
+
+    public Vector3 GetTurtlePosition()
+    {
+        if (currentTurtleStatus == null) return Vector3.zero;
+        
+        return new Vector3(
+            currentTurtleStatus.position.x + 1,
+            currentTurtleStatus.position.y,
+            currentTurtleStatus.position.z
+        );
+    }
+
+    public TurtleStatus GetCurrentStatus() => currentTurtleStatus;
+    public int QueuedCommands => commandQueue.Count;
+    public bool IsBusy => isExecutingCommands || commandQueue.Count > 0;
+
+    public void EmergencyStop()
+    {
+        StopAllCoroutines();
+        ClearCommandQueue();
+        isExecutingCommands = false;
+        
+        Debug.Log("Emergency stop executed");
+
+        StartCoroutine(UpdateTurtleStatus());
+        StartCoroutine(ProcessCommandQueue());
+    }
+
+    #endregion
+
+    protected virtual void OnDestroy()
+    {
+        StopAllCoroutines();
+    }
+}
+
+#region Supporting Classes
+
+[System.Serializable]
+public class TurtleCommand
+{
+    public string command;
+    public string turtleId;
+    public Vector3 targetPosition;
+    public string blockType;
+    public int retryCount;
+    public bool isOptimized;
+    public bool requiresPositioning;
+
+    public TurtleCommand(string cmd, string id = null)
+    {
+        command = cmd;
+        turtleId = id ?? "TurtleSlave";
+        retryCount = 0;
+        isOptimized = false;
+        requiresPositioning = false;
+    }
+}
+
+[System.Serializable]
+public class CommandData
+{
+    public string label;
+    public string[] commands;
+}
+
+[System.Serializable]
+public class Position
+{
+    public int x, y, z;
+}
+
+[System.Serializable]
+public class TurtleStatus
+{
+    public string label;
+    public string direction;
+    public Position position;
+    public int fuelLevel;
+    public bool isBusy;
+}
+
+#endregion
