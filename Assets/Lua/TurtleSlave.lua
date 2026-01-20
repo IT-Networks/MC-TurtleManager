@@ -30,13 +30,30 @@ end
 
 
 function getDirection()
-    
+
     local x1, y1, z1 = gps.locate(2)
-    turtle.forward()
+    if not x1 then
+        print("Fehler: Kein GPS-Signal für initiale Position")
+        direction = "unknown"
+        return
+    end
+
+    -- Try to move forward
+    local moved = turtle.forward()
+    if not moved then
+        print("Fehler: Richtung konnte nicht bestimmt werden - Turtle blockiert")
+        direction = "unknown"
+        return
+    end
+
     local x2, y2, z2 = gps.locate(2)
     turtle.back()
 
-    if not x2 then print("Richtung konnte nicht bestimmt werden"); return end
+    if not x2 then
+        print("Fehler: Kein GPS-Signal nach Bewegung")
+        direction = "unknown"
+        return
+    end
 
     local dx = x2 - x1
     local dz = z2 - z1
@@ -45,7 +62,10 @@ function getDirection()
     elseif dx == -1 then direction = "west"
     elseif dz == 1 then direction = "south"
     elseif dz == -1 then direction = "north"
-    else direction = "unknown" end
+    else
+        print("Warnung: Unerwartete Bewegung dx=" .. dx .. " dz=" .. dz)
+        direction = "unknown"
+    end
 
     print("Richtung: " .. direction)
 end
@@ -159,13 +179,25 @@ while true do
         elseif cmd == "left" then
             turtle.turnLeft()
             local i = table.find(directionOrder, direction)
-            direction = directionOrder[(i - 2) % #directionOrder + 1]  -- links drehen
-            result = true
+            if i then
+                direction = directionOrder[(i - 2) % #directionOrder + 1]  -- links drehen
+                result = true
+            else
+                print("Warnung: Unbekannte Richtung, versuche Richtung neu zu bestimmen")
+                getDirection()
+                result = false
+            end
         elseif cmd == "right" then
             turtle.turnRight()
             local i = table.find(directionOrder, direction)
-            direction = directionOrder[i % #directionOrder + 1]  -- rechts drehen
-            result = true
+            if i then
+                direction = directionOrder[i % #directionOrder + 1]  -- rechts drehen
+                result = true
+            else
+                print("Warnung: Unbekannte Richtung, versuche Richtung neu zu bestimmen")
+                getDirection()
+                result = false
+            end
         elseif cmd == "dig" then
             result = turtle.dig()
         elseif cmd == "digdown" then

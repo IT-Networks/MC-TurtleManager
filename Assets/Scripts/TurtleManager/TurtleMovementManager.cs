@@ -21,6 +21,7 @@ public class TurtleMovementManager : MonoBehaviour
     private bool isFollowingPath = false;
     private int currentPathIndex = 0;
     private PathfindingResult currentPathResult;
+    private string cachedDirection = null; // Cache direction locally to avoid stale server status
 
     private void Start()
     {
@@ -105,6 +106,9 @@ public class TurtleMovementManager : MonoBehaviour
         isFollowingPath = true;
         currentPathResult = new PathfindingResult { optimizedPath = path };
         currentPathIndex = 1;
+
+        // Reset direction cache at start of new path to sync with server status
+        cachedDirection = null;
 
         while (currentPathIndex < path.Count && isFollowingPath)
         {
@@ -208,17 +212,28 @@ public class TurtleMovementManager : MonoBehaviour
     public IEnumerator FaceDirection(string targetDirection)
     {
         var status = baseManager.GetCurrentStatus();
-        if (status == null || status.direction == targetDirection)
+        if (status == null) yield break;
+
+        // Use cached direction if available, otherwise use server status
+        string currentDirection = !string.IsNullOrEmpty(cachedDirection) ? cachedDirection : status.direction;
+
+        if (currentDirection == targetDirection)
+        {
+            cachedDirection = targetDirection; // Update cache
             yield break;
+        }
 
-        Debug.Log($"Turning from {status.direction} to {targetDirection}");
+        Debug.Log($"Turning from {currentDirection} to {targetDirection}");
 
-        var turnCommands = GetTurnCommands(status.direction, targetDirection);
+        var turnCommands = GetTurnCommands(currentDirection, targetDirection);
         foreach (string command in turnCommands)
         {
             baseManager.QueueCommand(new TurtleCommand(command, baseManager.defaultTurtleId));
         }
-        
+
+        // Update cached direction immediately after queueing turn commands
+        cachedDirection = targetDirection;
+
         yield return null;
     }
 
@@ -371,6 +386,7 @@ public class TurtleMovementManager : MonoBehaviour
         isFollowingPath = false;
         currentPathResult = null;
         currentPathIndex = 0;
+        cachedDirection = null; // Reset direction cache
         baseManager.ClearCommandQueue();
     }
 }
