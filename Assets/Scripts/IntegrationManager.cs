@@ -18,7 +18,6 @@ public class IntegrationManager : MonoBehaviour
     public TurtleMiningManager turtleMiningManager;
     public TurtleBuildingManager turtleBuildingManager;
     public TurtleOperationManager turtleOperationManager;
-    public MiningBlockValidator blockValidator;
     public BlockWorldPathfinder pathfinder;
     
     [Header("Construction System")]
@@ -134,15 +133,7 @@ public class IntegrationManager : MonoBehaviour
             operationObj.transform.SetParent(turtleMainController.transform);
             turtleOperationManager = operationObj.AddComponent<TurtleOperationManager>();
         }
-        
-        // Setup block validator
-        if (blockValidator == null)
-        {
-            GameObject validatorObj = new GameObject("MiningBlockValidator");
-            validatorObj.transform.SetParent(turtleMainController.transform);
-            blockValidator = validatorObj.AddComponent<MiningBlockValidator>();
-        }
-        
+
         // Setup pathfinder
         if (pathfinder == null)
         {
@@ -164,20 +155,14 @@ public class IntegrationManager : MonoBehaviour
             turtleMainController.miningManager = turtleMiningManager;
             turtleMainController.buildingManager = turtleBuildingManager;
             turtleMainController.operationManager = turtleOperationManager;
-            turtleMainController.blockValidator = blockValidator;
-            
+            turtleMainController.worldManager = worldManager;
+
             // Set up cross-references
-            if (blockValidator != null)
-            {
-                blockValidator.worldManager = worldManager;
-                blockValidator.pathfinder = pathfinder;
-            }
-            
             if (pathfinder != null)
             {
                 pathfinder.worldManager = worldManager;
             }
-            
+
             Debug.Log("Modular turtle system references connected successfully");
         }
     }

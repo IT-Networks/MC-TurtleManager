@@ -793,17 +793,29 @@ public class TurtleWorldManager : MonoBehaviour
             Mathf.FloorToInt(camPos.z / chunkSize)
         );
 
-        // Check chunks in radius around camera
-        for (int x = -maxFrustumCheckDistance; x <= maxFrustumCheckDistance; x++)
+        // Calculate actual view distance based on camera far plane
+        float viewDistance = _cam.farClipPlane;
+        int actualCheckDistance = Mathf.Min(
+            Mathf.CeilToInt(viewDistance / chunkSize) + 2, // +2 for safety margin
+            maxFrustumCheckDistance
+        );
+
+        // Check chunks in calculated radius around camera
+        for (int x = -actualCheckDistance; x <= actualCheckDistance; x++)
         {
-            for (int z = -maxFrustumCheckDistance; z <= maxFrustumCheckDistance; z++)
+            for (int z = -actualCheckDistance; z <= actualCheckDistance; z++)
             {
                 Vector2Int chunkCoord = new Vector2Int(centerChunk.x + x, centerChunk.y + z);
+
+                // Quick distance check first (cheaper than bounds test)
+                float chunkDistance = Mathf.Sqrt(x * x + z * z) * chunkSize;
+                if (chunkDistance > viewDistance + chunkSize)
+                    continue; // Too far, skip
 
                 // Create bounds for this chunk
                 Bounds chunkBounds = GetChunkBounds(chunkCoord);
 
-                // Test if chunk is in frustum
+                // Test if chunk is actually in frustum
                 if (GeometryUtility.TestPlanesAABB(frustumPlanes, chunkBounds))
                 {
                     visible.Add(chunkCoord);

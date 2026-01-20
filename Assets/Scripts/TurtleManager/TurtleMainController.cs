@@ -13,7 +13,7 @@ public class TurtleMainController : MonoBehaviour
     public TurtleMiningManager miningManager;
     public TurtleBuildingManager buildingManager;
     public TurtleOperationManager operationManager;
-    public MiningBlockValidator blockValidator;
+    public TurtleWorldManager worldManager;
 
     [Header("Integration Settings")]
     public bool autoFindComponents = true;
@@ -54,7 +54,7 @@ public class TurtleMainController : MonoBehaviour
         if (miningManager == null) miningManager = GetComponent<TurtleMiningManager>();
         if (buildingManager == null) buildingManager = GetComponent<TurtleBuildingManager>();
         if (operationManager == null) operationManager = GetComponent<TurtleOperationManager>();
-        if (blockValidator == null) blockValidator = GetComponent<MiningBlockValidator>();
+        if (worldManager == null) worldManager = FindFirstObjectByType<TurtleWorldManager>();
 
         // Try to find in children if not found
         if (baseManager == null) baseManager = GetComponentInChildren<TurtleBaseManager>();
@@ -62,7 +62,6 @@ public class TurtleMainController : MonoBehaviour
         if (miningManager == null) miningManager = GetComponentInChildren<TurtleMiningManager>();
         if (buildingManager == null) buildingManager = GetComponentInChildren<TurtleBuildingManager>();
         if (operationManager == null) operationManager = GetComponentInChildren<TurtleOperationManager>();
-        if (blockValidator == null) blockValidator = GetComponentInChildren<MiningBlockValidator>();
     }
 
     private void ValidateComponents()
@@ -109,13 +108,35 @@ public class TurtleMainController : MonoBehaviour
     }
 
     /// <summary>
-    /// Validate blocks for mining
+    /// Filter solid blocks from selection (for visualization)
     /// </summary>
     public List<Vector3> ValidateMiningBlocks(List<Vector3> blockPositions)
     {
-        if (miningManager == null) return blockPositions;
-        
-        return miningManager.ValidateMiningBlocks(blockPositions);
+        if (worldManager == null) return blockPositions;
+
+        var solidBlocks = new List<Vector3>();
+
+        foreach (var pos in blockPositions)
+        {
+            var chunk = worldManager.GetChunkContaining(pos);
+            if (chunk == null || !chunk.IsLoaded) continue;
+
+            var chunkInfo = chunk.GetChunkInfo();
+            if (chunkInfo == null) continue;
+
+            var blockType = chunkInfo.GetBlockTypeAt(pos);
+            if (string.IsNullOrEmpty(blockType)) continue;
+
+            string lower = blockType.ToLowerInvariant();
+            bool isAir = lower.Contains("air") || lower.Equals("minecraft:air");
+
+            if (!isAir)
+            {
+                solidBlocks.Add(pos);
+            }
+        }
+
+        return solidBlocks;
     }
 
     /// <summary>
@@ -124,7 +145,7 @@ public class TurtleMainController : MonoBehaviour
     public List<Vector3> OptimizeMiningOrder(List<Vector3> blockPositions)
     {
         if (miningManager == null) return blockPositions;
-        
+
         return miningManager.OptimizeMiningOrder(blockPositions);
     }
 
@@ -322,7 +343,7 @@ public class TurtleMainController : MonoBehaviour
         report.AppendLine($"Mining Manager: {(miningManager != null ? "OK" : "MISSING")}");
         report.AppendLine($"Building Manager: {(buildingManager != null ? "OK" : "MISSING")}");
         report.AppendLine($"Operation Manager: {(operationManager != null ? "OK" : "MISSING")}");
-        report.AppendLine($"Block Validator: {(blockValidator != null ? "OK" : "MISSING")}");
+        report.AppendLine($"World Manager: {(worldManager != null ? "OK" : "MISSING")}");
         
         report.AppendLine();
         report.AppendLine($"System Ready: {IsReady()}");
@@ -350,7 +371,7 @@ public class TurtleMainController : MonoBehaviour
             ["Mining"] = miningManager != null,
             ["Building"] = buildingManager != null,
             ["Movement"] = movementManager != null,
-            ["Block Validation"] = blockValidator != null,
+            ["World Manager"] = worldManager != null,
             ["Status Tracking"] = baseManager != null,
             ["Operation Management"] = operationManager != null
         };
@@ -462,11 +483,26 @@ public static class TurtleMainControllerExtensions
     /// </summary>
     public static string GetMiningReport(this TurtleMainController controller, List<Vector3> blocks)
     {
-        if (controller.blockValidator == null)
-            return "Block validator not available";
+        if (controller.worldManager == null)
+            return "World manager not available";
 
         Vector3 turtlePos = controller.GetTurtlePosition();
-        return controller.blockValidator.GetValidationReport(blocks, turtlePos);
+        var validBlocks = controller.ValidateMiningBlocks(blocks);
+
+        var report = new System.Text.StringBuilder();
+        report.AppendLine("=== MINING REPORT ===");
+        report.AppendLine($"Total Selected: {blocks.Count}");
+        report.AppendLine($"Solid Blocks: {validBlocks.Count}");
+        report.AppendLine($"Empty Blocks: {blocks.Count - validBlocks.Count}");
+        report.AppendLine($"Turtle Position: {turtlePos}");
+
+        if (validBlocks.Count > 0)
+        {
+            float avgDistance = validBlocks.Average(b => Vector3.Distance(b, turtlePos));
+            report.AppendLine($"Average Distance: {avgDistance:F1}");
+        }
+
+        return report.ToString();
     }
 
     /// <summary>

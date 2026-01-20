@@ -17,6 +17,12 @@ public class TurtleMovementManager : MonoBehaviour
     public float positionTolerance = 0.1f;
     public int maxMovementRetries = 3;
 
+    [Header("Excavation Settings")]
+    [Tooltip("Allow turtle to dig through obstacles when moving to target (faster but mines more blocks)")]
+    public bool enableAutoExcavation = false;
+    [Tooltip("Only used when Auto Excavation is enabled")]
+    public bool showExcavationWarnings = true;
+
     private TurtleBaseManager baseManager;
     private bool isFollowingPath = false;
     private int currentPathIndex = 0;
@@ -126,7 +132,7 @@ public class TurtleMovementManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Direct movement without pathfinding, with automatic excavation
+    /// Direct movement without pathfinding, with optional automatic excavation
     /// </summary>
     public IEnumerator MoveDirectlyToPosition(Vector3 targetPosition)
     {
@@ -148,8 +154,8 @@ public class TurtleMovementManager : MonoBehaviour
                 // Calculate next position
                 nextPos = currentPos + (difference.x > 0 ? Vector3.right : Vector3.left);
 
-                // Check and dig if blocked
-                if (IsBlockSolidAtPosition(nextPos))
+                // Check and dig if blocked (only if auto excavation enabled)
+                if (enableAutoExcavation && IsBlockSolidAtPosition(nextPos))
                 {
                     Debug.Log($"Excavating obstacle at {nextPos} to reach target");
                     baseManager.QueueCommand(new TurtleCommand("dig", baseManager.defaultTurtleId));
@@ -174,8 +180,8 @@ public class TurtleMovementManager : MonoBehaviour
                 // Calculate next position
                 nextPos = currentPos + (difference.z > 0 ? Vector3.forward : Vector3.back);
 
-                // Check and dig if blocked
-                if (IsBlockSolidAtPosition(nextPos))
+                // Check and dig if blocked (only if auto excavation enabled)
+                if (enableAutoExcavation && IsBlockSolidAtPosition(nextPos))
                 {
                     Debug.Log($"Excavating obstacle at {nextPos} to reach target");
                     baseManager.QueueCommand(new TurtleCommand("dig", baseManager.defaultTurtleId));
@@ -198,8 +204,8 @@ public class TurtleMovementManager : MonoBehaviour
                 {
                     nextPos = currentPos + Vector3.up;
 
-                    // Check and dig if blocked
-                    if (IsBlockSolidAtPosition(nextPos))
+                    // Check and dig if blocked (only if auto excavation enabled)
+                    if (enableAutoExcavation && IsBlockSolidAtPosition(nextPos))
                     {
                         Debug.Log($"Excavating obstacle above at {nextPos}");
                         baseManager.QueueCommand(new TurtleCommand("digup", baseManager.defaultTurtleId));
@@ -220,8 +226,8 @@ public class TurtleMovementManager : MonoBehaviour
                 {
                     nextPos = currentPos + Vector3.down;
 
-                    // Check and dig if blocked
-                    if (IsBlockSolidAtPosition(nextPos))
+                    // Check and dig if blocked (only if auto excavation enabled)
+                    if (enableAutoExcavation && IsBlockSolidAtPosition(nextPos))
                     {
                         Debug.Log($"Excavating obstacle below at {nextPos}");
                         baseManager.QueueCommand(new TurtleCommand("digdown", baseManager.defaultTurtleId));
@@ -266,7 +272,7 @@ public class TurtleMovementManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Execute single movement step with obstacle detection and excavation
+    /// Execute single movement step with optional obstacle excavation
     /// </summary>
     private IEnumerator ExecuteMovementStep(Vector3 from, Vector3 to)
     {
@@ -277,23 +283,39 @@ public class TurtleMovementManager : MonoBehaviour
             // Vertical movement
             if (direction.y > 0)
             {
-                // Check if block above is solid - dig if needed
-                if (IsBlockSolidAtPosition(to))
+                // Check if block above is solid
+                if (enableAutoExcavation && IsBlockSolidAtPosition(to))
                 {
                     Debug.Log($"Obstacle detected above at {to}, excavating...");
                     baseManager.QueueCommand(new TurtleCommand("digup", baseManager.defaultTurtleId));
                     yield return new WaitUntil(() => !baseManager.IsBusy);
+
+                    // Remove block from world
+                    if (baseManager.worldManager != null)
+                    {
+                        var chunk = baseManager.worldManager.GetChunkContaining(to);
+                        chunk?.GetChunkInfo()?.RemoveBlockAt(to);
+                        baseManager.worldManager.RemoveBlockAtWorldPosition(to);
+                    }
                 }
                 baseManager.QueueCommand(new TurtleCommand("up", baseManager.defaultTurtleId));
             }
             else
             {
-                // Check if block below is solid - dig if needed
-                if (IsBlockSolidAtPosition(to))
+                // Check if block below is solid
+                if (enableAutoExcavation && IsBlockSolidAtPosition(to))
                 {
                     Debug.Log($"Obstacle detected below at {to}, excavating...");
                     baseManager.QueueCommand(new TurtleCommand("digdown", baseManager.defaultTurtleId));
                     yield return new WaitUntil(() => !baseManager.IsBusy);
+
+                    // Remove block from world
+                    if (baseManager.worldManager != null)
+                    {
+                        var chunk = baseManager.worldManager.GetChunkContaining(to);
+                        chunk?.GetChunkInfo()?.RemoveBlockAt(to);
+                        baseManager.worldManager.RemoveBlockAtWorldPosition(to);
+                    }
                 }
                 baseManager.QueueCommand(new TurtleCommand("down", baseManager.defaultTurtleId));
             }
@@ -304,14 +326,14 @@ public class TurtleMovementManager : MonoBehaviour
             string targetDirection = GetDirectionFromVector(direction);
             yield return StartCoroutine(FaceDirection(targetDirection));
 
-            // Check if block ahead is solid - dig if needed
-            if (IsBlockSolidAtPosition(to))
+            // Check if block ahead is solid
+            if (enableAutoExcavation && IsBlockSolidAtPosition(to))
             {
                 Debug.Log($"Obstacle detected ahead at {to}, excavating...");
                 baseManager.QueueCommand(new TurtleCommand("dig", baseManager.defaultTurtleId));
                 yield return new WaitUntil(() => !baseManager.IsBusy);
 
-                // Remove block from world after digging
+                // Remove block from world
                 if (baseManager.worldManager != null)
                 {
                     var chunk = baseManager.worldManager.GetChunkContaining(to);
@@ -484,7 +506,17 @@ public class TurtleMovementManager : MonoBehaviour
         // (turtle will need to dig its way there)
         if (!foundReachablePosition)
         {
-            Debug.LogWarning($"No directly reachable adjacent position found for {blockPosition}. Turtle will need to excavate a path.");
+            if (showExcavationWarnings)
+            {
+                if (enableAutoExcavation)
+                {
+                    Debug.LogWarning($"No directly reachable adjacent position found for {blockPosition}. Turtle will excavate a path.");
+                }
+                else
+                {
+                    Debug.LogWarning($"No directly reachable adjacent position found for {blockPosition}. Enable 'Auto Excavation' to allow turtle to dig through obstacles, or turtle may get stuck!");
+                }
+            }
 
             bestDistance = float.MaxValue;
             foreach (Vector3 pos in adjacentPositions)
@@ -501,9 +533,9 @@ public class TurtleMovementManager : MonoBehaviour
             }
         }
 
-        if (bestPosition != Vector3.zero)
+        if (bestPosition != Vector3.zero && showExcavationWarnings)
         {
-            string reachabilityInfo = foundReachablePosition ? "reachable" : "needs excavation";
+            string reachabilityInfo = foundReachablePosition ? "directly reachable" : (enableAutoExcavation ? "needs excavation (enabled)" : "needs excavation (DISABLED - may fail!)");
             Debug.Log($"Best adjacent position for {blockPosition}: {bestPosition} (distance: {bestDistance:F1}, {reachabilityInfo})");
         }
 
