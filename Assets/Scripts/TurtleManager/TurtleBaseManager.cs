@@ -35,6 +35,9 @@ public class TurtleBaseManager : MonoBehaviour
 
     protected virtual void Start()
     {
+        // Allow Unity to continue running in background - critical for command processing
+        Application.runInBackground = true;
+
         worldManager = GetComponent<TurtleWorldManager>() ?? FindFirstObjectByType<TurtleWorldManager>();
         StartCoroutine(UpdateTurtleStatus());
         StartCoroutine(ProcessCommandQueue());
