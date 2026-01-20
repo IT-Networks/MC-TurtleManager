@@ -15,23 +15,28 @@ public class TurtleMiningManager : MonoBehaviour
 
     [Header("References")]
     public MiningBlockValidator blockValidator;
+    public ColumnBasedMiningOptimizer columnOptimizer;
 
     private TurtleBaseManager baseManager;
     private TurtleMovementManager movementManager;
     private TurtleOperationManager operationManager;
-    
+
     // Mining state
     private Vector3 currentMiningTarget = Vector3.zero;
     private bool isPositioningForMining = false;
+    private Vector3 lastMiningPosition = Vector3.zero;
 
     private void Start()
     {
         baseManager = FindFirstObjectByType<TurtleBaseManager>();
         movementManager = FindFirstObjectByType<TurtleMovementManager>();
         operationManager = FindFirstObjectByType<TurtleOperationManager>();
-        
+
         if (blockValidator == null)
             blockValidator = FindFirstObjectByType<MiningBlockValidator>();
+
+        if (columnOptimizer == null)
+            columnOptimizer = FindFirstObjectByType<ColumnBasedMiningOptimizer>();
     }
 
     #region Mining Operations
@@ -48,8 +53,18 @@ public class TurtleMiningManager : MonoBehaviour
         }
 
         var optimizedBlocks = blockPositions;
-        
-        if (enableMiningOptimization && blockValidator != null)
+
+        // Use column-based optimizer if available (modern approach)
+        if (enableMiningOptimization && columnOptimizer != null)
+        {
+            Vector3 turtlePos = baseManager.GetTurtlePosition();
+            var columnPlan = columnOptimizer.OptimizeMining(blockPositions, turtlePos);
+            optimizedBlocks = columnPlan.optimizedBlockOrder;
+
+            Debug.Log($"Using column-based mining: {columnPlan.totalColumns} columns, {columnPlan.totalBlocks} blocks");
+        }
+        // Fallback to layer-based validator
+        else if (enableMiningOptimization && blockValidator != null)
         {
             Vector3 turtlePos = baseManager.GetTurtlePosition();
             optimizedBlocks = blockValidator.ValidateBlocksForMining(blockPositions, turtlePos).validBlocks;
@@ -66,14 +81,19 @@ public class TurtleMiningManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Execute mining operation
+    /// Execute mining operation with optimized column-aware positioning
     /// </summary>
     private IEnumerator ExecuteMiningOperation(List<Vector3> blocks)
     {
         Debug.Log($"Starting mining operation: {blocks.Count} blocks");
 
-        foreach (Vector3 blockPos in blocks)
+        Vector3 lastBlockPos = Vector3.zero;
+        bool needsRepositioning = true;
+
+        for (int i = 0; i < blocks.Count; i++)
         {
+            Vector3 blockPos = blocks[i];
+
             if (validateBlocksBeforeMining && !ShouldMineBlock(blockPos))
             {
                 Debug.Log($"Skipping block at {blockPos} - validation failed");
@@ -81,8 +101,29 @@ public class TurtleMiningManager : MonoBehaviour
                 continue;
             }
 
-            yield return StartCoroutine(MineBlockWithPositioning(blockPos));
+            // Check if we need to reposition (optimize for column mining)
+            if (i > 0 && columnOptimizer != null && columnOptimizer.optimizePathfinding)
+            {
+                Vector3 turtlePos = baseManager.GetTurtlePosition();
+                needsRepositioning = columnOptimizer.NeedsRepositioning(lastBlockPos, blockPos, turtlePos);
 
+                if (!needsRepositioning)
+                {
+                    Debug.Log($"Mining block {i + 1}/{blocks.Count} in same column - no repositioning needed");
+                }
+            }
+
+            if (needsRepositioning)
+            {
+                yield return StartCoroutine(MineBlockWithPositioning(blockPos));
+            }
+            else
+            {
+                // Mine directly without repositioning (already adjacent)
+                yield return StartCoroutine(ExecuteMiningAction(blockPos));
+            }
+
+            lastBlockPos = blockPos;
             operationManager.IncrementProcessed();
             yield return new WaitUntil(() => !baseManager.IsBusy);
             yield return new WaitForSeconds(1.5f);
