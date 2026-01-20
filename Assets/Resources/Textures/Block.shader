@@ -24,15 +24,18 @@ Shader "Custom/Block"
 
     SubShader
     {
-        Tags { "RenderType"="Opaque" "Queue"="Geometry" }
+        Tags { "RenderType"="Opaque" "Queue"="Geometry" "IgnoreProjector"="False" }
         LOD 200
 
         Pass
         {
+            Name "ForwardBase"
+            Tags { "LightMode"="ForwardBase" }
+
             ZWrite On
             ZTest LEqual
-            Blend One Zero
             Cull Back
+            ColorMask RGBA
             
             CGPROGRAM
             #pragma vertex vert
