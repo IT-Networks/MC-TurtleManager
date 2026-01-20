@@ -242,10 +242,54 @@ public class TurtleWorldManager : MonoBehaviour
             }
         }
 
+        // WICHTIG: Unload ZUERST ausführen, bevor neue Chunks geladen werden!
+        // So wird es immer ausgeführt, auch wenn die Coroutine später abbricht
+        List<Vector2Int> toUnload = new();
+        foreach (var kvp in _loadedChunks)
+        {
+            if (!needed.Contains(kvp.Key))
+                toUnload.Add(kvp.Key);
+        }
+
+        // Chunks entladen (in Pool zurückgeben oder zerstören)
+        foreach (var c in toUnload)
+        {
+            // Entferne aus regenerating chunks wenn vorhanden
+            regeneratingChunks.Remove(c);
+
+            // Use pooling if enabled, otherwise destroy
+            if (useChunkPooling && _chunkPool != null)
+            {
+                _loadedChunks[c].ReturnToPool(_chunkPool);
+            }
+            else
+            {
+                _loadedChunks[c].DestroyChunk();
+            }
+
+            _loadedChunks.Remove(c);
+        }
+
+        if (toUnload.Count > 0)
+        {
+            Debug.Log($"Unloaded {toUnload.Count} chunks (pooled: {useChunkPooling})");
+        }
+
         // Sort chunks by priority (movement direction)
         List<ChunkLoadPriority> prioritizedChunks = PrioritizeChunks(needed, camChunk);
 
+        // Nur Chunks laden die noch nicht existieren
+        var chunksToLoad = new List<ChunkLoadPriority>();
         foreach (var chunkPriority in prioritizedChunks)
+        {
+            if (!_loadedChunks.ContainsKey(chunkPriority.coord))
+            {
+                chunksToLoad.Add(chunkPriority);
+            }
+        }
+
+        // Chunks laden
+        foreach (var chunkPriority in chunksToLoad)
         {
             Vector2Int coord = chunkPriority.coord;
 
@@ -272,8 +316,6 @@ public class TurtleWorldManager : MonoBehaviour
                 }
             }
 
-            if (_loadedChunks.ContainsKey(coord)) continue;
-
             // Create new ChunkManager (no longer MonoBehaviour)
             var chunk = new ChunkManager(coord, chunkSize, this);
             _loadedChunks.Add(coord, chunk);
@@ -283,31 +325,6 @@ public class TurtleWorldManager : MonoBehaviour
         }
 
         _isLoadingChunks = false;
-
-        // Entladen von Chunks, die nicht mehr benötigt werden
-        List<Vector2Int> toUnload = new();
-        foreach (var kvp in _loadedChunks)
-        {
-            if (!needed.Contains(kvp.Key))
-                toUnload.Add(kvp.Key);
-        }
-        foreach (var c in toUnload)
-        {
-            // Entferne aus regenerating chunks wenn vorhanden
-            regeneratingChunks.Remove(c);
-
-            // Use pooling if enabled, otherwise destroy
-            if (useChunkPooling && _chunkPool != null)
-            {
-                _loadedChunks[c].ReturnToPool(_chunkPool);
-            }
-            else
-            {
-                _loadedChunks[c].DestroyChunk();
-            }
-
-            _loadedChunks.Remove(c);
-        }
     }
 
     // *** NEUE BLOCK-MANAGEMENT METHODEN ***
