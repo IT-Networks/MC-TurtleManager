@@ -36,6 +36,14 @@ public class TurtleWorldManager : MonoBehaviour
     [Tooltip("Maximum chunk distance to check for frustum culling")]
     public int maxFrustumCheckDistance = 15;
 
+    [Header("Movement-Based Prioritization")]
+    [Tooltip("Prioritize chunks in camera movement direction (like Minecraft)")]
+    public bool useMovementPrioritization = true;
+    [Tooltip("Cancel current loading and restart when camera moves")]
+    public bool cancelLoadingOnMovement = true;
+    [Tooltip("Minimum camera movement to trigger reprioritization")]
+    public float movementThreshold = 0.5f;
+
     [Header("Block Interaction Settings")]
     [SerializeField] private bool enableBlockInteractions = true;
     [SerializeField] private int maxConcurrentRegenerations = 3;
@@ -46,6 +54,13 @@ public class TurtleWorldManager : MonoBehaviour
     private readonly Dictionary<Vector2Int, ChunkManager> _loadedChunks = new();
     private Vector2Int _currentCameraChunk = new(int.MinValue, int.MinValue);
     private Camera _cam;
+    private CameraMovementTracker _movementTracker;
+
+    // Movement-based prioritization
+    private Coroutine _currentChunkLoadingCoroutine;
+    private bool _isLoadingChunks = false;
+    private Vector3 _lastCameraPosition;
+    private float _timeSinceLastMovement = 0f;
 
     // Optional: Material-Cache pro Blocktyp (für Submeshes)
     private readonly Dictionary<string, Material> _materialCache = new();
@@ -101,9 +116,21 @@ public class TurtleWorldManager : MonoBehaviour
         _cam = Camera.main;
         if (_cam == null) Debug.LogError("Keine Hauptkamera gefunden. Wechsele auf die Kamera mit RTSCameraController.");
 
+        // Initialize movement tracker
+        if (useMovementPrioritization && _cam != null)
+        {
+            _movementTracker = _cam.GetComponent<CameraMovementTracker>();
+            if (_movementTracker == null)
+            {
+                _movementTracker = _cam.gameObject.AddComponent<CameraMovementTracker>();
+                _movementTracker.movementThreshold = movementThreshold;
+            }
+            _lastCameraPosition = _cam.transform.position;
+        }
+
         StartCoroutine(ChunkStreamingLoop());
         StartCoroutine(SpawnOrUpdateTurtle());
-        
+
         if (autoSyncToServer)
         {
             StartCoroutine(ServerSyncLoop());
@@ -132,10 +159,33 @@ public class TurtleWorldManager : MonoBehaviour
                     Mathf.FloorToInt(camPos.z / (float)chunkSize)
                 );
 
-                if (camChunk != _currentCameraChunk)
+                // Check if camera moved significantly (for movement-based prioritization)
+                bool cameraMovedSignificantly = false;
+                if (useMovementPrioritization && _movementTracker != null)
+                {
+                    float distanceMoved = Vector3.Distance(_lastCameraPosition, camPos);
+                    cameraMovedSignificantly = distanceMoved > movementThreshold && _movementTracker.IsMoving;
+                }
+
+                // Interrupt current loading if camera is moving and we have that feature enabled
+                if (cancelLoadingOnMovement && cameraMovedSignificantly && _isLoadingChunks)
+                {
+                    if (_currentChunkLoadingCoroutine != null)
+                    {
+                        StopCoroutine(_currentChunkLoadingCoroutine);
+                        _currentChunkLoadingCoroutine = null;
+                        _isLoadingChunks = false;
+                        Debug.Log("Chunk loading interrupted due to camera movement - reprioritizing");
+                    }
+                }
+
+                // Start new loading if chunk changed OR camera moved significantly
+                if (camChunk != _currentCameraChunk || (cameraMovedSignificantly && !_isLoadingChunks))
                 {
                     _currentCameraChunk = camChunk;
-                    yield return StartCoroutine(UpdateLoadedChunks(camChunk));
+                    _lastCameraPosition = camPos;
+
+                    _currentChunkLoadingCoroutine = StartCoroutine(UpdateLoadedChunks(camChunk));
                 }
             }
             yield return new WaitForSeconds(chunkRefreshInterval);
@@ -144,6 +194,8 @@ public class TurtleWorldManager : MonoBehaviour
 
     IEnumerator UpdateLoadedChunks(Vector2Int camChunk)
     {
+        _isLoadingChunks = true;
+
         HashSet<Vector2Int> needed = new();
 
         if (useFrustumBasedLoading && _cam != null)
@@ -168,8 +220,13 @@ public class TurtleWorldManager : MonoBehaviour
             }
         }
 
-        foreach (var coord in needed)
+        // Sort chunks by priority (movement direction)
+        List<ChunkLoadPriority> prioritizedChunks = PrioritizeChunks(needed, camChunk);
+
+        foreach (var chunkPriority in prioritizedChunks)
         {
+            Vector2Int coord = chunkPriority.coord;
+
             // Wenn Kamera in der Zwischenzeit einen neuen Chunk erreicht → abbrechen
             Vector3 camPos = _cam.transform.position;
             Vector2Int currentCamChunk = new(
@@ -178,7 +235,19 @@ public class TurtleWorldManager : MonoBehaviour
             );
             if (currentCamChunk != _currentCameraChunk)
             {
+                _isLoadingChunks = false;
                 yield break;
+            }
+
+            // Check if camera moved significantly - abort if movement prioritization enabled
+            if (useMovementPrioritization && cancelLoadingOnMovement && _movementTracker != null && _movementTracker.IsMoving)
+            {
+                float distanceMoved = Vector3.Distance(_lastCameraPosition, camPos);
+                if (distanceMoved > movementThreshold)
+                {
+                    _isLoadingChunks = false;
+                    yield break; // Will be restarted by ChunkStreamingLoop
+                }
             }
 
             if (_loadedChunks.ContainsKey(coord)) continue;
@@ -188,8 +257,10 @@ public class TurtleWorldManager : MonoBehaviour
             _loadedChunks.Add(coord, chunk);
 
             // Load chunk data
-            yield return StartCoroutine(chunk.LoadAndSpawnChunk());            
+            yield return StartCoroutine(chunk.LoadAndSpawnChunk());
         }
+
+        _isLoadingChunks = false;
 
         // Entladen von Chunks, die nicht mehr benötigt werden
         List<Vector2Int> toUnload = new();
@@ -727,6 +798,102 @@ public class TurtleWorldManager : MonoBehaviour
         }
 
         return buffer;
+    }
+
+    /// <summary>
+    /// Prioritizes chunks based on camera movement direction (Minecraft-style)
+    /// </summary>
+    private List<ChunkLoadPriority> PrioritizeChunks(HashSet<Vector2Int> chunks, Vector2Int cameraChunk)
+    {
+        List<ChunkLoadPriority> prioritized = new List<ChunkLoadPriority>();
+
+        Vector3 cameraPos = _cam != null ? _cam.transform.position : Vector3.zero;
+        Vector3 movementDir = Vector3.zero;
+
+        // Get movement direction if tracker is available
+        if (useMovementPrioritization && _movementTracker != null && _movementTracker.IsMoving)
+        {
+            movementDir = _movementTracker.MovementDirection;
+        }
+
+        foreach (var chunkCoord in chunks)
+        {
+            float priority = CalculateChunkPriority(chunkCoord, cameraChunk, cameraPos, movementDir);
+            prioritized.Add(new ChunkLoadPriority { coord = chunkCoord, priority = priority });
+        }
+
+        // Sort by priority (higher priority first)
+        prioritized.Sort((a, b) => b.priority.CompareTo(a.priority));
+
+        return prioritized;
+    }
+
+    /// <summary>
+    /// Calculates loading priority for a chunk
+    /// Priority factors:
+    /// 1. Distance from camera (closer = higher)
+    /// 2. Alignment with movement direction (in front = higher)
+    /// 3. Currently visible in frustum (visible = higher)
+    /// </summary>
+    private float CalculateChunkPriority(Vector2Int chunkCoord, Vector2Int cameraChunk, Vector3 cameraPos, Vector3 movementDir)
+    {
+        float priority = 100f; // Base priority
+
+        // Factor 1: Distance (closer chunks are more important)
+        float distance = Vector2Int.Distance(chunkCoord, cameraChunk);
+        float distancePriority = Mathf.Max(0, 50f - distance * 5f); // Decreases with distance
+        priority += distancePriority;
+
+        // Factor 2: Movement direction alignment
+        if (useMovementPrioritization && movementDir != Vector3.zero)
+        {
+            // Get direction from camera to chunk center
+            Bounds chunkBounds = GetChunkBounds(chunkCoord);
+            Vector3 toChunk = (chunkBounds.center - cameraPos).normalized;
+
+            // Ignore Y component for horizontal alignment
+            Vector3 toChunkFlat = new Vector3(toChunk.x, 0, toChunk.z).normalized;
+            Vector3 movementFlat = new Vector3(movementDir.x, 0, movementDir.z).normalized;
+
+            if (toChunkFlat != Vector3.zero && movementFlat != Vector3.zero)
+            {
+                // Dot product: 1 = same direction, -1 = opposite direction
+                float alignment = Vector3.Dot(toChunkFlat, movementFlat);
+
+                // Boost priority for chunks in movement direction
+                float movementPriority = alignment * 75f; // -75 to +75
+                priority += movementPriority;
+
+                // Extra boost for chunks directly ahead
+                if (alignment > 0.8f) // Within ~36 degrees
+                {
+                    priority += 50f; // Extra priority for straight ahead
+                }
+            }
+        }
+
+        // Factor 3: Frustum visibility (visible chunks get boost)
+        if (useFrustumBasedLoading && _cam != null)
+        {
+            Bounds chunkBounds = GetChunkBounds(chunkCoord);
+            Plane[] frustumPlanes = GeometryUtility.CalculateFrustumPlanes(_cam);
+
+            if (GeometryUtility.TestPlanesAABB(frustumPlanes, chunkBounds))
+            {
+                priority += 100f; // Significant boost for visible chunks
+            }
+        }
+
+        return priority;
+    }
+
+    /// <summary>
+    /// Helper class for chunk loading prioritization
+    /// </summary>
+    private class ChunkLoadPriority
+    {
+        public Vector2Int coord;
+        public float priority;
     }
 
     /// <summary>
