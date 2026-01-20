@@ -25,8 +25,14 @@ public class ColumnBasedMiningOptimizer : MonoBehaviour
     [Tooltip("Enable pathfinding optimization (reuse position for column)")]
     public bool optimizePathfinding = true;
 
+    [Tooltip("Skip empty columns automatically")]
+    public bool skipEmptyColumns = true;
+
     [Tooltip("Show debug visualization")]
     public bool showDebugInfo = false;
+
+    [Header("World References")]
+    public TurtleWorldManager worldManager;
 
     public enum MiningPattern
     {
@@ -40,6 +46,14 @@ public class ColumnBasedMiningOptimizer : MonoBehaviour
     {
         TopDown,    // Mine from top to bottom (stable, prevents cave-ins)
         BottomUp    // Mine from bottom to top
+    }
+
+    private void Start()
+    {
+        if (worldManager == null)
+        {
+            worldManager = FindFirstObjectByType<TurtleWorldManager>();
+        }
     }
 
     /// <summary>
@@ -149,14 +163,22 @@ public class ColumnBasedMiningOptimizer : MonoBehaviour
     }
 
     /// <summary>
-    /// Groups blocks into vertical columns based on X,Z position
+    /// Groups blocks into vertical columns based on X,Z position, filtering empty blocks
     /// </summary>
     private List<MiningColumn> GroupIntoColumns(List<Vector3> blocks)
     {
         var columnDict = new Dictionary<Vector2Int, MiningColumn>();
+        int skippedBlocks = 0;
 
         foreach (var block in blocks)
         {
+            // Skip if block is not actually solid (air/empty)
+            if (skipEmptyColumns && !IsBlockSolid(block))
+            {
+                skippedBlocks++;
+                continue;
+            }
+
             // Round to integer coordinates
             Vector2Int horizontalPos = new Vector2Int(
                 Mathf.RoundToInt(block.x),
@@ -171,19 +193,59 @@ public class ColumnBasedMiningOptimizer : MonoBehaviour
             columnDict[horizontalPos].blocks.Add(block);
         }
 
-        // Sort blocks within each column
-        var columns = columnDict.Values.ToList();
-        foreach (var column in columns)
+        // Sort blocks within each column and filter out empty columns
+        var columns = new List<MiningColumn>();
+        foreach (var column in columnDict.Values)
         {
-            column.SortBlocks(columnDirection);
+            if (column.blocks.Count > 0)
+            {
+                column.SortBlocks(columnDirection);
+                columns.Add(column);
+            }
         }
 
         if (showDebugInfo)
         {
-            Debug.Log($"Grouped {blocks.Count} blocks into {columns.Count} columns");
+            Debug.Log($"Grouped {blocks.Count} blocks into {columns.Count} columns (skipped {skippedBlocks} empty blocks)");
         }
 
         return columns;
+    }
+
+    /// <summary>
+    /// Check if a block at the given position is solid (not air)
+    /// </summary>
+    private bool IsBlockSolid(Vector3 position)
+    {
+        if (worldManager == null)
+        {
+            // Fallback: assume all selected blocks are solid if we can't verify
+            return true;
+        }
+
+        var chunk = worldManager.GetChunkContaining(position);
+        if (chunk == null || !chunk.IsLoaded)
+        {
+            // Can't verify, assume solid
+            return true;
+        }
+
+        var chunkInfo = chunk.GetChunkInfo();
+        if (chunkInfo == null)
+        {
+            return true;
+        }
+
+        var blockType = chunkInfo.GetBlockTypeAt(position);
+
+        // Check if it's a solid block (not air)
+        if (string.IsNullOrEmpty(blockType))
+            return false;
+
+        string lower = blockType.ToLowerInvariant();
+        bool isAir = lower.Contains("air") || lower.Equals("minecraft:air");
+
+        return !isAir;
     }
 
     /// <summary>
