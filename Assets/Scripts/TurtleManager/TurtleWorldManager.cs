@@ -28,6 +28,14 @@ public class TurtleWorldManager : MonoBehaviour
     public int chunkLoadRadius = 2;   // in Chunk-Einheiten
     public float chunkRefreshInterval = 0.5f;
 
+    [Header("Camera-Based Loading")]
+    [Tooltip("Use camera frustum for chunk loading instead of fixed radius")]
+    public bool useFrustumBasedLoading = true;
+    [Tooltip("Additional chunk rings to load around visible chunks")]
+    public int frustumBufferRings = 1;
+    [Tooltip("Maximum chunk distance to check for frustum culling")]
+    public int maxFrustumCheckDistance = 15;
+
     [Header("Block Interaction Settings")]
     [SerializeField] private bool enableBlockInteractions = true;
     [SerializeField] private int maxConcurrentRegenerations = 3;
@@ -137,11 +145,26 @@ public class TurtleWorldManager : MonoBehaviour
     IEnumerator UpdateLoadedChunks(Vector2Int camChunk)
     {
         HashSet<Vector2Int> needed = new();
-        for (int x = -chunkLoadRadius; x <= chunkLoadRadius; x++)
+
+        if (useFrustumBasedLoading && _cam != null)
         {
-            for (int z = -chunkLoadRadius; z <= chunkLoadRadius; z++)
+            // Use camera frustum-based loading
+            needed = GetFrustumVisibleChunks();
+            // Add buffer rings
+            if (frustumBufferRings > 0)
             {
-                needed.Add(new Vector2Int(camChunk.x + x, camChunk.y + z));
+                needed.UnionWith(GetBufferRingChunks(needed, frustumBufferRings));
+            }
+        }
+        else
+        {
+            // Use traditional radius-based loading
+            for (int x = -chunkLoadRadius; x <= chunkLoadRadius; x++)
+            {
+                for (int z = -chunkLoadRadius; z <= chunkLoadRadius; z++)
+                {
+                    needed.Add(new Vector2Int(camChunk.x + x, camChunk.y + z));
+                }
             }
         }
 
@@ -630,6 +653,101 @@ public class TurtleWorldManager : MonoBehaviour
         "west" => Vector3.right,
         _ => Vector3.forward,
     };
+
+    // *** FRUSTUM-BASED CHUNK LOADING METHODS ***
+
+    /// <summary>
+    /// Gets all chunks visible in camera frustum
+    /// </summary>
+    private HashSet<Vector2Int> GetFrustumVisibleChunks()
+    {
+        HashSet<Vector2Int> visible = new HashSet<Vector2Int>();
+        if (_cam == null) return visible;
+
+        // Get camera frustum planes
+        Plane[] frustumPlanes = GeometryUtility.CalculateFrustumPlanes(_cam);
+
+        // Get camera chunk position
+        Vector3 camPos = _cam.transform.position;
+        Vector2Int centerChunk = new Vector2Int(
+            Mathf.FloorToInt(-camPos.x / chunkSize),
+            Mathf.FloorToInt(camPos.z / chunkSize)
+        );
+
+        // Check chunks in radius around camera
+        for (int x = -maxFrustumCheckDistance; x <= maxFrustumCheckDistance; x++)
+        {
+            for (int z = -maxFrustumCheckDistance; z <= maxFrustumCheckDistance; z++)
+            {
+                Vector2Int chunkCoord = new Vector2Int(centerChunk.x + x, centerChunk.y + z);
+
+                // Create bounds for this chunk
+                Bounds chunkBounds = GetChunkBounds(chunkCoord);
+
+                // Test if chunk is in frustum
+                if (GeometryUtility.TestPlanesAABB(frustumPlanes, chunkBounds))
+                {
+                    visible.Add(chunkCoord);
+                }
+            }
+        }
+
+        return visible;
+    }
+
+    /// <summary>
+    /// Gets buffer ring chunks around visible chunks
+    /// </summary>
+    private HashSet<Vector2Int> GetBufferRingChunks(HashSet<Vector2Int> visibleChunks, int rings)
+    {
+        HashSet<Vector2Int> buffer = new HashSet<Vector2Int>();
+
+        foreach (var chunk in visibleChunks)
+        {
+            for (int ring = 1; ring <= rings; ring++)
+            {
+                for (int x = -ring; x <= ring; x++)
+                {
+                    for (int z = -ring; z <= ring; z++)
+                    {
+                        // Only add chunks on the ring boundary
+                        if (Mathf.Abs(x) < ring && Mathf.Abs(z) < ring)
+                            continue;
+
+                        Vector2Int neighbor = new Vector2Int(chunk.x + x, chunk.y + z);
+
+                        // Don't add if already visible
+                        if (!visibleChunks.Contains(neighbor))
+                        {
+                            buffer.Add(neighbor);
+                        }
+                    }
+                }
+            }
+        }
+
+        return buffer;
+    }
+
+    /// <summary>
+    /// Gets world-space bounds for a chunk coordinate
+    /// </summary>
+    private Bounds GetChunkBounds(Vector2Int chunkCoord)
+    {
+        // Convert chunk coordinate to world position (X is negated)
+        float worldX = -chunkCoord.x * chunkSize;
+        float worldZ = chunkCoord.y * chunkSize;
+
+        Vector3 center = new Vector3(
+            worldX + chunkSize * 0.5f,
+            128f, // Approximate center height
+            worldZ + chunkSize * 0.5f
+        );
+
+        Vector3 size = new Vector3(chunkSize, 256f, chunkSize);
+
+        return new Bounds(center, size);
+    }
 
     // Public API for external access to chunks (erweitert)
     public ChunkManager GetChunkAt(Vector2Int coord)
