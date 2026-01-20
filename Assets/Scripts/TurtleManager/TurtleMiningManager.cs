@@ -14,7 +14,6 @@ public class TurtleMiningManager : MonoBehaviour
     public float miningPositionTolerance = 0.1f;
 
     [Header("References")]
-    public MiningBlockValidator blockValidator;
     public ColumnBasedMiningOptimizer columnOptimizer;
 
     private TurtleBaseManager baseManager;
@@ -31,9 +30,6 @@ public class TurtleMiningManager : MonoBehaviour
         baseManager = FindFirstObjectByType<TurtleBaseManager>();
         movementManager = FindFirstObjectByType<TurtleMovementManager>();
         operationManager = FindFirstObjectByType<TurtleOperationManager>();
-
-        if (blockValidator == null)
-            blockValidator = FindFirstObjectByType<MiningBlockValidator>();
 
         if (columnOptimizer == null)
             columnOptimizer = FindFirstObjectByType<ColumnBasedMiningOptimizer>();
@@ -52,32 +48,55 @@ public class TurtleMiningManager : MonoBehaviour
             return;
         }
 
-        var optimizedBlocks = blockPositions;
+        // Filter out empty positions first
+        var solidBlocks = FilterSolidBlocks(blockPositions);
 
-        // Use column-based optimizer if available (modern approach)
+        if (solidBlocks.Count == 0)
+        {
+            Debug.LogWarning("No solid blocks to mine in selection");
+            return;
+        }
+
+        Debug.Log($"Filtered selection: {solidBlocks.Count} solid blocks from {blockPositions.Count} total positions");
+
+        var optimizedBlocks = solidBlocks;
+
+        // Use column-based optimizer
         if (enableMiningOptimization && columnOptimizer != null)
         {
             Vector3 turtlePos = baseManager.GetTurtlePosition();
-            var columnPlan = columnOptimizer.OptimizeMining(blockPositions, turtlePos);
+            var columnPlan = columnOptimizer.OptimizeMining(solidBlocks, turtlePos);
             optimizedBlocks = columnPlan.optimizedBlockOrder;
 
-            Debug.Log($"Using column-based mining: {columnPlan.totalColumns} columns, {columnPlan.totalBlocks} blocks");
-        }
-        // Fallback to layer-based validator
-        else if (enableMiningOptimization && blockValidator != null)
-        {
-            Vector3 turtlePos = baseManager.GetTurtlePosition();
-            optimizedBlocks = blockValidator.ValidateBlocksForMining(blockPositions, turtlePos).validBlocks;
+            Debug.Log($"Column-based mining plan: {columnPlan.totalColumns} columns, {columnPlan.totalBlocks} blocks");
         }
 
         if (optimizedBlocks.Count == 0)
         {
-            Debug.LogWarning("No valid blocks to mine");
+            Debug.LogWarning("No valid blocks to mine after optimization");
             return;
         }
 
         operationManager.StartOperation(TurtleOperationManager.OperationType.Mining, optimizedBlocks.Count);
         StartCoroutine(ExecuteMiningOperation(optimizedBlocks));
+    }
+
+    /// <summary>
+    /// Filter out air/empty blocks from selection
+    /// </summary>
+    private List<Vector3> FilterSolidBlocks(List<Vector3> blockPositions)
+    {
+        var solidBlocks = new List<Vector3>();
+
+        foreach (var pos in blockPositions)
+        {
+            if (IsBlockMineable(pos))
+            {
+                solidBlocks.Add(pos);
+            }
+        }
+
+        return solidBlocks;
     }
 
     /// <summary>
@@ -250,21 +269,14 @@ public class TurtleMiningManager : MonoBehaviour
         // Distance check
         Vector3 turtlePos = baseManager.GetTurtlePosition();
         float distance = Vector3.Distance(turtlePos, blockPosition);
-        
+
         if (distance > blockValidationRadius)
         {
             Debug.LogWarning($"Block at {blockPosition} too far from turtle ({distance:F1} > {blockValidationRadius})");
             return false;
         }
 
-        // Use validator if available
-        if (blockValidator != null)
-        {
-            var result = blockValidator.ValidateBlocksForMining(blockPosition, turtlePos);
-            return result.validBlocks.Count > 0;
-        }
-
-        // Fallback validation
+        // Check if block is actually solid
         return IsBlockMineable(blockPosition);
     }
 
@@ -292,31 +304,23 @@ public class TurtleMiningManager : MonoBehaviour
     #region Optimization
 
     /// <summary>
-    /// Validate mining blocks using validator
-    /// </summary>
-    public List<Vector3> ValidateMiningBlocks(List<Vector3> blockPositions)
-    {
-        if (!validateBlocksBeforeMining || blockValidator == null)
-            return new List<Vector3>(blockPositions);
-
-        Vector3 turtlePos = baseManager.GetTurtlePosition();
-        return blockValidator.ValidateBlocksForMining(blockPositions, turtlePos).validBlocks;
-    }
-
-    /// <summary>
-    /// Optimize mining order based on turtle position
+    /// Optimize mining order using column-based approach
     /// </summary>
     public List<Vector3> OptimizeMiningOrder(List<Vector3> blockPositions)
     {
-        if (!enableMiningOptimization) return blockPositions;
+        if (!enableMiningOptimization || columnOptimizer == null)
+            return blockPositions;
+
+        // Filter solid blocks first
+        var solidBlocks = FilterSolidBlocks(blockPositions);
+
+        if (solidBlocks.Count == 0)
+            return new List<Vector3>();
 
         Vector3 turtlePos = baseManager.GetTurtlePosition();
-        
-        var optimized = new List<Vector3>(blockPositions);
-        optimized.Sort((a, b) => 
-            Vector3.Distance(a, turtlePos).CompareTo(Vector3.Distance(b, turtlePos)));
+        var columnPlan = columnOptimizer.OptimizeMining(solidBlocks, turtlePos);
 
-        return optimized;
+        return columnPlan.optimizedBlockOrder;
     }
 
     #endregion

@@ -126,52 +126,147 @@ public class TurtleMovementManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Direct movement without pathfinding
+    /// Direct movement without pathfinding, with automatic excavation
     /// </summary>
     public IEnumerator MoveDirectlyToPosition(Vector3 targetPosition)
     {
+        int stuckCounter = 0;
+        int maxStuckAttempts = 3;
+
         while (Vector3.Distance(baseManager.GetTurtlePosition(), targetPosition) > positionTolerance)
         {
             Vector3 currentPos = baseManager.GetTurtlePosition();
             Vector3 difference = targetPosition - currentPos;
 
+            Vector3 nextPos = currentPos;
+
             if (Mathf.Abs(difference.x) > positionTolerance)
             {
                 string direction = difference.x > 0 ? "west" : "east";
                 yield return StartCoroutine(FaceDirection(direction));
+
+                // Calculate next position
+                nextPos = currentPos + (difference.x > 0 ? Vector3.right : Vector3.left);
+
+                // Check and dig if blocked
+                if (IsBlockSolidAtPosition(nextPos))
+                {
+                    Debug.Log($"Excavating obstacle at {nextPos} to reach target");
+                    baseManager.QueueCommand(new TurtleCommand("dig", baseManager.defaultTurtleId));
+                    yield return new WaitUntil(() => !baseManager.IsBusy);
+
+                    // Remove block from world
+                    if (baseManager.worldManager != null)
+                    {
+                        var chunk = baseManager.worldManager.GetChunkContaining(nextPos);
+                        chunk?.GetChunkInfo()?.RemoveBlockAt(nextPos);
+                        baseManager.worldManager.RemoveBlockAtWorldPosition(nextPos);
+                    }
+                }
+
                 baseManager.QueueCommand(new TurtleCommand("forward", baseManager.defaultTurtleId));
             }
             else if (Mathf.Abs(difference.z) > positionTolerance)
             {
                 string direction = difference.z > 0 ? "south" : "north";
                 yield return StartCoroutine(FaceDirection(direction));
+
+                // Calculate next position
+                nextPos = currentPos + (difference.z > 0 ? Vector3.forward : Vector3.back);
+
+                // Check and dig if blocked
+                if (IsBlockSolidAtPosition(nextPos))
+                {
+                    Debug.Log($"Excavating obstacle at {nextPos} to reach target");
+                    baseManager.QueueCommand(new TurtleCommand("dig", baseManager.defaultTurtleId));
+                    yield return new WaitUntil(() => !baseManager.IsBusy);
+
+                    // Remove block from world
+                    if (baseManager.worldManager != null)
+                    {
+                        var chunk = baseManager.worldManager.GetChunkContaining(nextPos);
+                        chunk?.GetChunkInfo()?.RemoveBlockAt(nextPos);
+                        baseManager.worldManager.RemoveBlockAtWorldPosition(nextPos);
+                    }
+                }
+
                 baseManager.QueueCommand(new TurtleCommand("forward", baseManager.defaultTurtleId));
             }
             else if (Mathf.Abs(difference.y) > positionTolerance)
             {
                 if (difference.y > 0)
                 {
+                    nextPos = currentPos + Vector3.up;
+
+                    // Check and dig if blocked
+                    if (IsBlockSolidAtPosition(nextPos))
+                    {
+                        Debug.Log($"Excavating obstacle above at {nextPos}");
+                        baseManager.QueueCommand(new TurtleCommand("digup", baseManager.defaultTurtleId));
+                        yield return new WaitUntil(() => !baseManager.IsBusy);
+
+                        // Remove block from world
+                        if (baseManager.worldManager != null)
+                        {
+                            var chunk = baseManager.worldManager.GetChunkContaining(nextPos);
+                            chunk?.GetChunkInfo()?.RemoveBlockAt(nextPos);
+                            baseManager.worldManager.RemoveBlockAtWorldPosition(nextPos);
+                        }
+                    }
+
                     baseManager.QueueCommand(new TurtleCommand("up", baseManager.defaultTurtleId));
                 }
                 else
                 {
+                    nextPos = currentPos + Vector3.down;
+
+                    // Check and dig if blocked
+                    if (IsBlockSolidAtPosition(nextPos))
+                    {
+                        Debug.Log($"Excavating obstacle below at {nextPos}");
+                        baseManager.QueueCommand(new TurtleCommand("digdown", baseManager.defaultTurtleId));
+                        yield return new WaitUntil(() => !baseManager.IsBusy);
+
+                        // Remove block from world
+                        if (baseManager.worldManager != null)
+                        {
+                            var chunk = baseManager.worldManager.GetChunkContaining(nextPos);
+                            chunk?.GetChunkInfo()?.RemoveBlockAt(nextPos);
+                            baseManager.worldManager.RemoveBlockAtWorldPosition(nextPos);
+                        }
+                    }
+
                     baseManager.QueueCommand(new TurtleCommand("down", baseManager.defaultTurtleId));
                 }
             }
 
             yield return new WaitUntil(() => !baseManager.IsBusy);
 
-            // Safety check
-            if (Vector3.Distance(baseManager.GetTurtlePosition(), currentPos) < 0.1f)
+            // Safety check for getting stuck
+            Vector3 newPos = baseManager.GetTurtlePosition();
+            if (Vector3.Distance(newPos, currentPos) < 0.1f)
             {
-                Debug.LogWarning($"Turtle stuck at {baseManager.GetTurtlePosition()}, stopping movement");
-                break;
+                stuckCounter++;
+                Debug.LogWarning($"Turtle stuck at {newPos}, attempt {stuckCounter}/{maxStuckAttempts}");
+
+                if (stuckCounter >= maxStuckAttempts)
+                {
+                    Debug.LogError($"Turtle permanently stuck at {newPos}, cannot reach {targetPosition}");
+                    break;
+                }
+
+                // Try to unstuck by digging in the intended direction
+                yield return new WaitForSeconds(0.5f);
+            }
+            else
+            {
+                stuckCounter = 0; // Reset counter if we moved
             }
         }
     }
 
     /// <summary>
-    /// Execute single movement step
+    /// Execute single movement step with obstacle detection and excavation
     /// </summary>
     private IEnumerator ExecuteMovementStep(Vector3 from, Vector3 to)
     {
@@ -182,12 +277,24 @@ public class TurtleMovementManager : MonoBehaviour
             // Vertical movement
             if (direction.y > 0)
             {
-                //baseManager.QueueCommand(new TurtleCommand("digup", baseManager.defaultTurtleId));
+                // Check if block above is solid - dig if needed
+                if (IsBlockSolidAtPosition(to))
+                {
+                    Debug.Log($"Obstacle detected above at {to}, excavating...");
+                    baseManager.QueueCommand(new TurtleCommand("digup", baseManager.defaultTurtleId));
+                    yield return new WaitUntil(() => !baseManager.IsBusy);
+                }
                 baseManager.QueueCommand(new TurtleCommand("up", baseManager.defaultTurtleId));
             }
             else
             {
-                //baseManager.QueueCommand(new TurtleCommand("digdown", baseManager.defaultTurtleId));
+                // Check if block below is solid - dig if needed
+                if (IsBlockSolidAtPosition(to))
+                {
+                    Debug.Log($"Obstacle detected below at {to}, excavating...");
+                    baseManager.QueueCommand(new TurtleCommand("digdown", baseManager.defaultTurtleId));
+                    yield return new WaitUntil(() => !baseManager.IsBusy);
+                }
                 baseManager.QueueCommand(new TurtleCommand("down", baseManager.defaultTurtleId));
             }
         }
@@ -196,10 +303,49 @@ public class TurtleMovementManager : MonoBehaviour
             // Horizontal movement
             string targetDirection = GetDirectionFromVector(direction);
             yield return StartCoroutine(FaceDirection(targetDirection));
+
+            // Check if block ahead is solid - dig if needed
+            if (IsBlockSolidAtPosition(to))
+            {
+                Debug.Log($"Obstacle detected ahead at {to}, excavating...");
+                baseManager.QueueCommand(new TurtleCommand("dig", baseManager.defaultTurtleId));
+                yield return new WaitUntil(() => !baseManager.IsBusy);
+
+                // Remove block from world after digging
+                if (baseManager.worldManager != null)
+                {
+                    var chunk = baseManager.worldManager.GetChunkContaining(to);
+                    chunk?.GetChunkInfo()?.RemoveBlockAt(to);
+                    baseManager.worldManager.RemoveBlockAtWorldPosition(to);
+                }
+            }
+
             baseManager.QueueCommand(new TurtleCommand("forward", baseManager.defaultTurtleId));
         }
 
         yield return null;
+    }
+
+    /// <summary>
+    /// Check if there's a solid block at the given position
+    /// </summary>
+    private bool IsBlockSolidAtPosition(Vector3 position)
+    {
+        if (baseManager.worldManager == null) return false;
+
+        var chunk = baseManager.worldManager.GetChunkContaining(position);
+        if (chunk == null || !chunk.IsLoaded) return false;
+
+        var chunkInfo = chunk.GetChunkInfo();
+        if (chunkInfo == null) return false;
+
+        var blockType = chunkInfo.GetBlockTypeAt(position);
+
+        // Check if it's a solid, non-air block
+        if (string.IsNullOrEmpty(blockType) || IsAirBlock(blockType))
+            return false;
+
+        return true; // It's a solid block
     }
 
     #endregion
@@ -298,12 +444,12 @@ public class TurtleMovementManager : MonoBehaviour
     #region Position Utilities
 
     /// <summary>
-    /// Find best adjacent position to a target block
+    /// Find best adjacent position to a target block with pathfinding verification
     /// </summary>
     public Vector3 GetBestAdjacentPosition(Vector3 blockPosition)
     {
         Vector3 currentPos = baseManager.GetTurtlePosition();
-        
+
         Vector3[] adjacentPositions = {
             blockPosition + Vector3.right,   // East
             blockPosition + Vector3.left,    // West
@@ -314,26 +460,142 @@ public class TurtleMovementManager : MonoBehaviour
 
         Vector3 bestPosition = Vector3.zero;
         float bestDistance = float.MaxValue;
+        bool foundReachablePosition = false;
 
+        // First pass: Try to find a position that's both accessible AND reachable via pathfinding
         foreach (Vector3 pos in adjacentPositions)
         {
             if (IsPositionAccessible(pos))
             {
+                // Check if we can actually path to this position
+                bool isReachable = CanPathToPosition(currentPos, pos);
                 float distance = Vector3.Distance(currentPos, pos);
-                if (distance < bestDistance)
+
+                if (isReachable && distance < bestDistance)
                 {
                     bestDistance = distance;
                     bestPosition = pos;
+                    foundReachablePosition = true;
+                }
+            }
+        }
+
+        // Second pass: If no reachable position found, find closest accessible position
+        // (turtle will need to dig its way there)
+        if (!foundReachablePosition)
+        {
+            Debug.LogWarning($"No directly reachable adjacent position found for {blockPosition}. Turtle will need to excavate a path.");
+
+            bestDistance = float.MaxValue;
+            foreach (Vector3 pos in adjacentPositions)
+            {
+                if (IsPositionAccessible(pos))
+                {
+                    float distance = Vector3.Distance(currentPos, pos);
+                    if (distance < bestDistance)
+                    {
+                        bestDistance = distance;
+                        bestPosition = pos;
+                    }
                 }
             }
         }
 
         if (bestPosition != Vector3.zero)
         {
-            Debug.Log($"Best adjacent position for {blockPosition}: {bestPosition} (distance: {bestDistance:F1})");
+            string reachabilityInfo = foundReachablePosition ? "reachable" : "needs excavation";
+            Debug.Log($"Best adjacent position for {blockPosition}: {bestPosition} (distance: {bestDistance:F1}, {reachabilityInfo})");
         }
 
         return bestPosition;
+    }
+
+    /// <summary>
+    /// Check if we can path to a position (quick check)
+    /// </summary>
+    private bool CanPathToPosition(Vector3 from, Vector3 to)
+    {
+        // Quick distance check - if very far, don't bother pathfinding
+        float distance = Vector3.Distance(from, to);
+        if (distance > 50f) return false;
+
+        // If already very close, consider it reachable
+        if (distance < 2f) return true;
+
+        // Try pathfinding with NavMesh
+        if (usePathfinding && pathfinder != null)
+        {
+            var pathResult = pathfinder.FindPath(from, to, defaultPathfindingOptions);
+            return pathResult.success;
+        }
+
+        // Fallback: Check if path is clear using simple raycast-style check
+        return IsPathClear(from, to);
+    }
+
+    /// <summary>
+    /// Simple check if path between two points is relatively clear
+    /// </summary>
+    private bool IsPathClear(Vector3 from, Vector3 to)
+    {
+        Vector3 direction = to - from;
+        float distance = direction.magnitude;
+        Vector3 normalized = direction.normalized;
+
+        // Sample a few points along the path
+        int samples = Mathf.Min((int)distance + 1, 10);
+        for (int i = 1; i <= samples; i++)
+        {
+            Vector3 checkPos = from + normalized * (distance * i / samples);
+
+            if (!IsPositionClearOrDiggable(checkPos))
+            {
+                return false; // Path blocked by undiggable obstacle
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Check if position is clear or can be dug through
+    /// </summary>
+    private bool IsPositionClearOrDiggable(Vector3 position)
+    {
+        if (baseManager.worldManager == null) return true;
+
+        var chunk = baseManager.worldManager.GetChunkContaining(position);
+        if (chunk == null || !chunk.IsLoaded) return true;
+
+        var chunkInfo = chunk.GetChunkInfo();
+        if (chunkInfo == null) return true;
+
+        var blockType = chunkInfo.GetBlockTypeAt(position);
+
+        // Position is clear
+        if (string.IsNullOrEmpty(blockType) || IsAirBlock(blockType)) return true;
+
+        // Check if it's a diggable block (not bedrock, etc.)
+        return IsBlockDiggable(blockType);
+    }
+
+    /// <summary>
+    /// Check if a block can be dug
+    /// </summary>
+    private bool IsBlockDiggable(string blockType)
+    {
+        if (string.IsNullOrEmpty(blockType)) return false;
+
+        string lower = blockType.ToLowerInvariant();
+
+        // Unbreakable blocks
+        if (lower.Contains("bedrock")) return false;
+        if (lower.Contains("barrier")) return false;
+        if (lower.Contains("command")) return false;
+        if (lower.Contains("end_portal_frame")) return false;
+
+        // Everything else is diggable
+        return true;
     }
 
     /// <summary>
