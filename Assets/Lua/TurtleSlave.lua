@@ -41,14 +41,9 @@ function getDirection()
     -- Try to move forward
     local moved = turtle.forward()
     if not moved then
-        print("Warnung: Turtle konnte sich nicht vorwärts bewegen, grabe Block")
-        turtle.dig()
-        moved = turtle.forward()
-        if not moved then
-            print("Fehler: Richtung konnte nicht bestimmt werden - Turtle blockiert")
-            direction = "unknown"
-            return
-        end
+        print("Fehler: Richtung konnte nicht bestimmt werden - Turtle blockiert")
+        direction = "unknown"
+        return
     end
 
     local x2, y2, z2 = gps.locate(2)
