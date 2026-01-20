@@ -126,9 +126,17 @@ public class ChunkPool : MonoBehaviour
         {
             // Clear mesh to free memory
             MeshFilter meshFilter = chunk.GetComponent<MeshFilter>();
+            MeshCollider meshCollider = chunk.GetComponent<MeshCollider>();
+
             if (meshFilter != null && meshFilter.sharedMesh != null)
             {
                 meshFilter.sharedMesh.Clear();
+            }
+
+            // Clear MeshCollider to prevent "mesh has no vertices" warning
+            if (meshCollider != null)
+            {
+                meshCollider.sharedMesh = null;
             }
 
             chunk.SetActive(false);
