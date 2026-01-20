@@ -44,6 +44,14 @@ public class TurtleWorldManager : MonoBehaviour
     [Tooltip("Minimum camera movement to trigger reprioritization")]
     public float movementThreshold = 0.5f;
 
+    [Header("Chunk Pooling & Caching")]
+    [Tooltip("Enable chunk pooling for performance")]
+    public bool useChunkPooling = true;
+    [Tooltip("Enable mesh caching for instant reload")]
+    public bool enableMeshCaching = true;
+    [Tooltip("Maximum pooled chunks (0 = unlimited)")]
+    public int maxPooledChunks = 100;
+
     [Header("Block Interaction Settings")]
     [SerializeField] private bool enableBlockInteractions = true;
     [SerializeField] private int maxConcurrentRegenerations = 3;
@@ -55,6 +63,7 @@ public class TurtleWorldManager : MonoBehaviour
     private Vector2Int _currentCameraChunk = new(int.MinValue, int.MinValue);
     private Camera _cam;
     private CameraMovementTracker _movementTracker;
+    private ChunkPool _chunkPool;
 
     // Movement-based prioritization
     private Coroutine _currentChunkLoadingCoroutine;
@@ -115,6 +124,19 @@ public class TurtleWorldManager : MonoBehaviour
     {
         _cam = Camera.main;
         if (_cam == null) Debug.LogError("Keine Hauptkamera gefunden. Wechsele auf die Kamera mit RTSCameraController.");
+
+        // Initialize chunk pool
+        if (useChunkPooling)
+        {
+            _chunkPool = GetComponent<ChunkPool>();
+            if (_chunkPool == null)
+            {
+                _chunkPool = gameObject.AddComponent<ChunkPool>();
+                _chunkPool.maxPoolSize = maxPooledChunks;
+                _chunkPool.enableMeshCaching = enableMeshCaching;
+                Debug.Log("ChunkPool initialized");
+            }
+        }
 
         // Initialize movement tracker
         if (useMovementPrioritization && _cam != null)
@@ -273,8 +295,17 @@ public class TurtleWorldManager : MonoBehaviour
         {
             // Entferne aus regenerating chunks wenn vorhanden
             regeneratingChunks.Remove(c);
-            
-            _loadedChunks[c].DestroyChunk();
+
+            // Use pooling if enabled, otherwise destroy
+            if (useChunkPooling && _chunkPool != null)
+            {
+                _loadedChunks[c].ReturnToPool(_chunkPool);
+            }
+            else
+            {
+                _loadedChunks[c].DestroyChunk();
+            }
+
             _loadedChunks.Remove(c);
         }
     }

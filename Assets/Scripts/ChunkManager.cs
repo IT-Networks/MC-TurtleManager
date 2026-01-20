@@ -50,25 +50,127 @@ public class ChunkManager
 
     private void CreateGameObject()
     {
-        _go = new GameObject($"Chunk_{coord.x}_{coord.y}")
+        // Try to get from pool if available
+        ChunkPool pool = manager.GetComponent<ChunkPool>();
+        bool hasCachedMesh = false;
+
+        if (pool != null && manager.useChunkPooling)
         {
-            transform =
+            _go = pool.GetChunk(coord, out hasCachedMesh);
+            _go.transform.SetParent(manager.transform);
+
+            // Get existing components
+            _mf = _go.GetComponent<MeshFilter>();
+            _mr = _go.GetComponent<MeshRenderer>();
+            _mc = _go.GetComponent<MeshCollider>();
+
+            // ChunkInfo needs to be re-added or reset
+            chunk = _go.GetComponent<ChunkInfo>();
+            if (chunk == null)
             {
-                position = Vector3.zero,
-                parent = manager.transform
+                chunk = _go.AddComponent<ChunkInfo>();
             }
-        };
-        
-        _mf = _go.AddComponent<MeshFilter>();
-        _mr = _go.AddComponent<MeshRenderer>();
-        _mc = _go.AddComponent<MeshCollider>();
-        chunk = _go.AddComponent<ChunkInfo>();
+
+            // If we have cached mesh, load it immediately
+            if (hasCachedMesh)
+            {
+                CachedChunkData cachedData = pool.GetCachedMeshData(coord);
+                if (cachedData != null && _mf.sharedMesh != null)
+                {
+                    cachedData.ApplyToMesh(_mf.sharedMesh);
+                    _mc.sharedMesh = _mf.sharedMesh;
+                    Debug.Log($"Chunk {coord}: Loaded from mesh cache (instant)");
+                }
+            }
+        }
+        else
+        {
+            // No pooling - create new GameObject
+            _go = new GameObject($"Chunk_{coord.x}_{coord.y}")
+            {
+                transform =
+                {
+                    position = Vector3.zero,
+                    parent = manager.transform
+                }
+            };
+
+            _mf = _go.AddComponent<MeshFilter>();
+            _mr = _go.AddComponent<MeshRenderer>();
+            _mc = _go.AddComponent<MeshCollider>();
+            chunk = _go.AddComponent<ChunkInfo>();
+        }
     }
 
+    /// <summary>
+    /// Returns chunk to pool instead of destroying it
+    /// </summary>
+    public void ReturnToPool(ChunkPool pool)
+    {
+        manager?.UnregisterChunkManager(coord);
+
+        if (loadedCoroutine != null)
+        {
+            CoroutineHelper.Instance.StopCoroutine(loadedCoroutine);
+            loadedCoroutine = null;
+        }
+
+        // Extract mesh geometry for caching
+        MeshGeometryData meshGeometry = null;
+        if (_mf != null && _mf.sharedMesh != null)
+        {
+            meshGeometry = ExtractMeshGeometry(_mf.sharedMesh);
+        }
+
+        // Return to pool with mesh data for caching
+        if (pool != null && _go != null)
+        {
+            pool.ReturnChunk(_go, coord, meshGeometry);
+        }
+
+        // Clear references but don't destroy GameObject (it's in pool)
+        _go = null;
+        _mf = null;
+        _mr = null;
+        _mc = null;
+        chunk = null;
+        currentMeshData = null;
+    }
+
+    /// <summary>
+    /// Extracts mesh geometry data from Unity Mesh for caching
+    /// </summary>
+    private MeshGeometryData ExtractMeshGeometry(Mesh mesh)
+    {
+        var geometryData = new MeshGeometryData
+        {
+            vertices = new List<Vector3>(mesh.vertices),
+            triangles = new List<int>(mesh.triangles),
+            uvs = new List<Vector2>(mesh.uv),
+            normals = mesh.normals != null ? new List<Vector3>(mesh.normals) : new List<Vector3>(),
+            submeshCount = mesh.subMeshCount,
+            submeshes = new List<int[]>()
+        };
+
+        // Extract submeshes if more than one
+        if (mesh.subMeshCount > 1)
+        {
+            for (int i = 0; i < mesh.subMeshCount; i++)
+            {
+                geometryData.submeshes.Add(mesh.GetTriangles(i));
+            }
+        }
+
+        return geometryData;
+    }
+
+    /// <summary>
+    /// Completely destroys chunk (no pooling)
+    /// </summary>
     public void DestroyChunk()
     {
         manager?.UnregisterChunkManager(coord);
-        
+
         if (loadedCoroutine != null)
         {
             CoroutineHelper.Instance.StopCoroutine(loadedCoroutine);
@@ -78,9 +180,9 @@ public class ChunkManager
         if (_mf?.sharedMesh != null)
             UnityEngine.Object.Destroy(_mf.sharedMesh);
 
-        if (_go != null) 
+        if (_go != null)
             UnityEngine.Object.Destroy(_go);
-            
+
         _go = null;
         _mf = null;
         _mr = null;
