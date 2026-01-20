@@ -71,11 +71,18 @@ public class ChunkManager
                 chunk = _go.AddComponent<ChunkInfo>();
             }
 
+            // Ensure we have a valid mesh (create new if pooled chunk had cleared mesh)
+            if (_mf.sharedMesh == null || _mf.sharedMesh.vertexCount == 0)
+            {
+                _mf.sharedMesh = new Mesh();
+                _mf.sharedMesh.name = $"ChunkMesh_{coord.x}_{coord.y}";
+            }
+
             // If we have cached mesh, load it immediately
             if (hasCachedMesh)
             {
                 CachedChunkData cachedData = pool.GetCachedMeshData(coord);
-                if (cachedData != null && _mf.sharedMesh != null)
+                if (cachedData != null)
                 {
                     cachedData.ApplyToMesh(_mf.sharedMesh);
                     _mc.sharedMesh = _mf.sharedMesh;
