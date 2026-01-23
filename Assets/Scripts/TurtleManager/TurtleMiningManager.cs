@@ -88,13 +88,23 @@ public class TurtleMiningManager : MonoBehaviour
     {
         var solidBlocks = new List<Vector3>();
 
+        Debug.Log($"=== FILTERING {blockPositions.Count} BLOCKS ===");
+
         foreach (var pos in blockPositions)
         {
+            Debug.Log($"Checking block at {pos}...");
             if (IsBlockMineable(pos))
             {
                 solidBlocks.Add(pos);
+                Debug.Log($"  -> Added to solid blocks list");
+            }
+            else
+            {
+                Debug.Log($"  -> Skipped (not mineable)");
             }
         }
+
+        Debug.Log($"=== FILTER COMPLETE: {solidBlocks.Count}/{blockPositions.Count} blocks are mineable ===");
 
         return solidBlocks;
     }
@@ -282,14 +292,52 @@ public class TurtleMiningManager : MonoBehaviour
 
     private bool IsBlockMineable(Vector3 blockPosition)
     {
-        var chunk = baseManager.worldManager?.GetChunkContaining(blockPosition);
-        if (chunk == null || !chunk.IsLoaded) return false;
+        if (baseManager.worldManager == null)
+        {
+            Debug.LogWarning($"WorldManager is null, cannot validate block at {blockPosition}");
+            return false;
+        }
+
+        var chunk = baseManager.worldManager.GetChunkContaining(blockPosition);
+        if (chunk == null)
+        {
+            Debug.LogWarning($"Chunk not found for block at {blockPosition}");
+            return false;
+        }
+
+        if (!chunk.IsLoaded)
+        {
+            Debug.LogWarning($"Chunk not loaded for block at {blockPosition}");
+            return false;
+        }
 
         var chunkInfo = chunk.GetChunkInfo();
-        if (chunkInfo == null) return false;
+        if (chunkInfo == null)
+        {
+            Debug.LogWarning($"ChunkInfo is null for block at {blockPosition}");
+            return false;
+        }
 
         var blockType = chunkInfo.GetBlockTypeAt(blockPosition);
-        return !string.IsNullOrEmpty(blockType) && !IsAirBlock(blockType);
+
+        if (string.IsNullOrEmpty(blockType))
+        {
+            Debug.LogWarning($"Block type is empty at {blockPosition}");
+            return false;
+        }
+
+        bool isAir = IsAirBlock(blockType);
+
+        if (isAir)
+        {
+            Debug.Log($"Block at {blockPosition} is air: {blockType}");
+        }
+        else
+        {
+            Debug.Log($"Block at {blockPosition} is mineable: {blockType}");
+        }
+
+        return !isAir;
     }
 
     private bool IsAirBlock(string blockType)
