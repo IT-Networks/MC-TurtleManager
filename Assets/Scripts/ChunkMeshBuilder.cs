@@ -4,19 +4,27 @@ using UnityEngine;
 
 /// <summary>
 /// Builds Unity meshes from chunk data with face culling and batched processing.
+/// Now supports cross-chunk face culling for optimal performance.
 /// </summary>
 public class ChunkMeshBuilder
 {
     private readonly ChunkUVProvider uvProvider;
+    private TurtleWorldManager worldManager;
 
     public ChunkMeshBuilder(ChunkUVProvider uvProvider = null)
     {
         this.uvProvider = uvProvider ?? new ChunkUVProvider(1);
     }
 
+    public void SetWorldManager(TurtleWorldManager manager)
+    {
+        this.worldManager = manager;
+    }
+
     public PreparedChunkMesh BuildMeshFromData(ChunkMeshData data, ChunkInfo chunkInfo = null)
     {
         var submeshes = new Dictionary<string, SubmeshBuild>();
+        var blockPositions = new List<(Vector3 position, string blockType)>();
 
         for (int x = 0; x < data.chunkSize; x++)
         {
@@ -35,13 +43,10 @@ public class ChunkMeshBuilder
                         y,
                         data.coord.y * data.chunkSize + z);
 
-                    // Add block to ChunkInfo if provided
-                    if (chunkInfo != null)
-                    {
-                        float wx = -(data.coord.x * data.chunkSize + x);
-                        float wz = data.coord.y * data.chunkSize + z;
-                        chunkInfo.AddBlock(new Vector3(wx, y - 128, wz), blockName);
-                    }
+                    // Store block positions for later ChunkInfo update (on main thread)
+                    float wx = -(data.coord.x * data.chunkSize + x);
+                    float wz = data.coord.y * data.chunkSize + z;
+                    blockPositions.Add((new Vector3(wx, y - 128, wz), blockName));
 
                     // Check adjacent blocks for face culling
                     bool[] visibleFaces = GetVisibleFaces(data, x, y, z);
@@ -50,7 +55,9 @@ public class ChunkMeshBuilder
             }
         }
 
-        return submeshes.Count == 0 ? new PreparedChunkMesh() : PreparedChunkMesh.FromBuild(submeshes);
+        var result = submeshes.Count == 0 ? new PreparedChunkMesh() : PreparedChunkMesh.FromBuild(submeshes);
+        result.blockPositions = blockPositions;
+        return result;
     }
 
     private bool[] GetVisibleFaces(ChunkMeshData data, int x, int y, int z)
@@ -58,18 +65,61 @@ public class ChunkMeshBuilder
         return new bool[6]
         {
             // Front (Z+)
-            z == data.chunkSize - 1 || !data.HasBlock(x, y, z + 1),
+            z == data.chunkSize - 1 ? !HasBlockInAdjacentChunk(data, x, y, z, 0, 0, 1) : !data.HasBlock(x, y, z + 1),
             // Back (Z-)
-            z == 0 || !data.HasBlock(x, y, z - 1),
+            z == 0 ? !HasBlockInAdjacentChunk(data, x, y, z, 0, 0, -1) : !data.HasBlock(x, y, z - 1),
             // Top (Y+)
             y == data.maxHeight - 1 || !data.HasBlock(x, y + 1, z),
             // Bottom (Y-)
             y == 0 || !data.HasBlock(x, y - 1, z),
             // Left (X-) - KORRIGIERT: War x == 0, jetzt x == data.chunkSize - 1
-            x == data.chunkSize - 1 || !data.HasBlock(x + 1, y, z),
+            x == data.chunkSize - 1 ? !HasBlockInAdjacentChunk(data, x, y, z, 1, 0, 0) : !data.HasBlock(x + 1, y, z),
             // Right (X+) - KORRIGIERT: War x == data.chunkSize - 1, jetzt x == 0
-            x == 0 || !data.HasBlock(x - 1, y, z)
+            x == 0 ? !HasBlockInAdjacentChunk(data, x, y, z, -1, 0, 0) : !data.HasBlock(x - 1, y, z)
         };
+    }
+
+    /// <summary>
+    /// Checks if there's a block in an adjacent chunk at the given position.
+    /// Returns true if a block exists (face should be hidden), false if not (face should be visible).
+    /// </summary>
+    private bool HasBlockInAdjacentChunk(ChunkMeshData data, int x, int y, int z, int chunkOffsetX, int chunkOffsetY, int chunkOffsetZ)
+    {
+        // If no world manager, default to showing the face (conservative approach)
+        if (worldManager == null)
+            return false;
+
+        // Calculate adjacent chunk coordinates
+        Vector2Int adjacentChunkCoord = new Vector2Int(
+            data.coord.x + chunkOffsetX,
+            data.coord.y + chunkOffsetZ
+        );
+
+        // Get the adjacent chunk manager
+        ChunkManager adjacentChunk = worldManager.GetChunkAt(adjacentChunkCoord);
+        if (adjacentChunk == null || !adjacentChunk.IsLoaded)
+            return false; // Chunk not loaded, show face
+
+        ChunkInfo adjacentInfo = adjacentChunk.GetChunkInfo();
+        if (adjacentInfo == null)
+            return false;
+
+        // Calculate the position in the adjacent chunk
+        int adjX = (x + (chunkOffsetX < 0 ? data.chunkSize - 1 : chunkOffsetX > 0 ? -data.chunkSize + 1 : 0)) % data.chunkSize;
+        int adjZ = (z + (chunkOffsetZ < 0 ? data.chunkSize - 1 : chunkOffsetZ > 0 ? -data.chunkSize + 1 : 0)) % data.chunkSize;
+
+        // Handle negative modulo properly
+        if (adjX < 0) adjX += data.chunkSize;
+        if (adjZ < 0) adjZ += data.chunkSize;
+
+        // Convert to world position and check if block exists
+        Vector3 worldPos = new Vector3(
+            -(adjacentChunkCoord.x * data.chunkSize + adjX),
+            y,
+            adjacentChunkCoord.y * data.chunkSize + adjZ
+        );
+
+        return adjacentInfo.GetBlockTypeAt(worldPos) != null;
     }
 
     private void AddCubeFaces(SubmeshBuild sb, Vector3 center, bool[] visibleFaces, string blockName)
@@ -178,6 +228,7 @@ public class PreparedChunkMesh
     public int totalVertexCount;
     public readonly List<SubmeshBuild> submeshBuilds = new();
     public readonly List<string> blockNames = new();
+    public List<(Vector3 position, string blockType)> blockPositions = new();
 
     public static PreparedChunkMesh FromBuild(Dictionary<string, SubmeshBuild> dict)
     {
