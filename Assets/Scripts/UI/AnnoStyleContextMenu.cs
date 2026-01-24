@@ -163,11 +163,20 @@ public class AnnoStyleContextMenu : MonoBehaviour
 
     private void OnBuildingButtonClicked()
     {
-        Debug.Log("Building mode selected");
+        Debug.Log("Building mode selected - opening structure selection");
 
-        if (areaManager != null)
+        // Open structure selection panel
+        if (uiManager != null)
         {
-            areaManager.ToggleMode(AreaSelectionManager.SelectionMode.Building);
+            uiManager.ShowStructureSelection();
+        }
+        else
+        {
+            // Fallback - activate building mode directly
+            if (areaManager != null)
+            {
+                areaManager.ToggleMode(AreaSelectionManager.SelectionMode.Building);
+            }
         }
 
         Hide();

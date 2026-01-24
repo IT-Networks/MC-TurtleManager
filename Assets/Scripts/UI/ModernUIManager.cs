@@ -15,17 +15,21 @@ public class ModernUIManager : MonoBehaviour
     public GameObject turtleListPanel;
     public GameObject taskQueuePanel;
     public GameObject quickActionsPanel;
+    public GameObject structureSelectionPanel;
 
     [Header("References")]
     public MultiTurtleManager turtleManager;
     public TurtleSelectionManager selectionManager;
     public AreaSelectionManager areaSelectionManager;
     public RTSCameraController cameraController;
+    public StructureManager structureManager;
+    public BuildModeManager buildModeManager;
 
     [Header("UI Components")]
     public AnnoStyleContextMenu contextMenu;
     public ModernTurtleListPanel turtleList;
     public TaskQueuePanel taskQueue;
+    public StructureSelectionPanel structureSelection;
 
     [Header("Settings")]
     public KeyCode contextMenuKey = KeyCode.Mouse1; // Right-click
@@ -63,9 +67,15 @@ public class ModernUIManager : MonoBehaviour
         if (taskQueue == null)
             taskQueue = GetComponentInChildren<TaskQueuePanel>();
 
-        // Initially hide context menu
+        if (structureSelection == null)
+            structureSelection = GetComponentInChildren<StructureSelectionPanel>();
+
+        // Initially hide panels
         if (contextMenuPanel != null)
             contextMenuPanel.SetActive(false);
+
+        if (structureSelectionPanel != null)
+            structureSelectionPanel.SetActive(false);
     }
 
     private void SetupReferences()
@@ -97,6 +107,15 @@ public class ModernUIManager : MonoBehaviour
         if (taskQueue != null)
         {
             taskQueue.Initialize(turtleManager, selectionManager);
+        }
+
+        if (structureSelection != null)
+        {
+            if (structureManager == null)
+                structureManager = StructureManager.Instance;
+
+            if (buildModeManager == null)
+                buildModeManager = FindFirstObjectByType<BuildModeManager>();
         }
     }
 
@@ -132,6 +151,11 @@ public class ModernUIManager : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.Q))
         {
             ToggleTaskQueue();
+        }
+
+        if (Input.GetKeyDown(KeyCode.B))
+        {
+            ToggleStructureSelection();
         }
 
         // ESC to close all panels
@@ -194,9 +218,36 @@ public class ModernUIManager : MonoBehaviour
             taskQueuePanel.SetActive(!taskQueuePanel.activeSelf);
     }
 
+    public void ToggleStructureSelection()
+    {
+        if (structureSelectionPanel != null)
+        {
+            bool isActive = !structureSelectionPanel.activeSelf;
+            structureSelectionPanel.SetActive(isActive);
+
+            if (isActive && structureSelection != null)
+            {
+                structureSelection.Show();
+            }
+        }
+    }
+
+    public void ShowStructureSelection()
+    {
+        if (structureSelection != null)
+            structureSelection.Show();
+    }
+
+    public void HideStructureSelection()
+    {
+        if (structureSelection != null)
+            structureSelection.Hide();
+    }
+
     public void CloseAllPanels()
     {
         if (contextMenuPanel != null) contextMenuPanel.SetActive(false);
+        if (structureSelectionPanel != null) structureSelectionPanel.SetActive(false);
     }
 
     // Task creation
