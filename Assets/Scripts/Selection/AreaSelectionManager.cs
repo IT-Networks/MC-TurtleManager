@@ -49,6 +49,7 @@ public class AreaSelectionManager : MonoBehaviour
     [Header("References")]
     public RTSCameraController cameraController;
     public TurtleMainController turtleMainController;
+    public TurtleSelectionManager turtleSelectionManager;
     public BlockWorldPathfinder pathfinder;
     
     [Header("Selection Settings")]
@@ -120,7 +121,10 @@ public class AreaSelectionManager : MonoBehaviour
         // Auto-find dependencies if not assigned
         if (turtleMainController == null)
             turtleMainController = FindFirstObjectByType<TurtleMainController>();
-        
+
+        if (turtleSelectionManager == null)
+            turtleSelectionManager = FindFirstObjectByType<TurtleSelectionManager>();
+
         if (pathfinder == null)
             pathfinder = FindFirstObjectByType<BlockWorldPathfinder>();
             
@@ -308,22 +312,32 @@ public class AreaSelectionManager : MonoBehaviour
     
     private void ExecuteOptimizedMining()
     {
-        if (turtleMainController == null)
-        {
-            Debug.LogError("TurtleMainController not found!");
-            return;
-        }
-
-        List<Vector3> blocksToMine = previewOptimization && optimizedOrder.Count > 0 ? 
+        List<Vector3> blocksToMine = previewOptimization && optimizedOrder.Count > 0 ?
                                      optimizedOrder : validBlocks;
 
         Debug.Log($"Executing mining operation: {blocksToMine.Count} blocks");
-        
+
         // Create simple work area visualization
         CreateWorkAreaVisualization(blocksToMine, SelectionMode.Mining);
-        
-        turtleMainController.StartOptimizedMining(blocksToMine);
-        
+
+        // Use TurtleSelectionManager if available (multi-turtle support)
+        if (turtleSelectionManager != null && turtleSelectionManager.HasSelection())
+        {
+            turtleSelectionManager.AssignMiningTask(blocksToMine);
+            Debug.Log($"Mining task assigned to {turtleSelectionManager.GetSelectionCount()} selected turtle(s)");
+        }
+        // Fallback to single turtle controller
+        else if (turtleMainController != null)
+        {
+            turtleMainController.StartOptimizedMining(blocksToMine);
+            Debug.Log("Mining task assigned to default turtle");
+        }
+        else
+        {
+            Debug.LogError("No turtle controller or selection manager found!");
+            return;
+        }
+
         ClearVisualization();
         ResetSelection();
     }
