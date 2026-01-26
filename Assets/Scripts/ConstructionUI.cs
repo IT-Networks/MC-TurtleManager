@@ -112,7 +112,7 @@ public class ConstructionUI : MonoBehaviour
         
         if (structureManager != null)
         {
-            structureManager.OnStructuresLoaded += OnStructuresLoaded;
+            // structureManager.OnStructuresLoaded += OnStructuresLoaded; // Removed - new architecture
         }
         
         if (turtleMainController != null)
@@ -379,7 +379,7 @@ public class ConstructionUI : MonoBehaviour
         if (string.IsNullOrEmpty(selectedStructureName) || areaManager?.SelectedBlocks.Count == 0) return;
         
         Vector3 buildPos = areaManager.SelectedBlocks[0];
-        structureManager.ShowStructurePreview(selectedStructureName, buildPos);
+        // structureManager.ShowStructurePreview(selectedStructureName, buildPos); // Removed - new architecture
         showingPreview = true;
         
         if (clearPreviewButton != null)
@@ -390,7 +390,7 @@ public class ConstructionUI : MonoBehaviour
     {
         if (structureManager != null)
         {
-            structureManager.ClearPreview();
+            // structureManager.ClearPreview(); // Removed - new architecture
         }
         showingPreview = false;
         
@@ -497,7 +497,7 @@ public class ConstructionUI : MonoBehaviour
         
         if (structureManager != null)
         {
-            structureManager.OnStructuresLoaded -= OnStructuresLoaded;
+            // structureManager.OnStructuresLoaded -= OnStructuresLoaded; // Removed - new architecture
         }
         
         if (turtleMainController != null)

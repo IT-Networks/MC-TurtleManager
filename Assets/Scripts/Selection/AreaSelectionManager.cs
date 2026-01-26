@@ -362,7 +362,7 @@ public class AreaSelectionManager : MonoBehaviour
         List<Vector3> buildPositions = new List<Vector3>();
         foreach (var block in structureData.blocks)
         {
-            buildPositions.Add(buildOrigin + (Vector3)block.position);
+            buildPositions.Add(buildOrigin + (Vector3)block.relativePosition);
         }
         CreateWorkAreaVisualization(buildPositions, SelectionMode.Building);
         

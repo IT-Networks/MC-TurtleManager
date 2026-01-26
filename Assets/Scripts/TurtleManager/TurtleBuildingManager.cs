@@ -63,7 +63,7 @@ public class TurtleBuildingManager : MonoBehaviour
 
         // Sort blocks by Y coordinate (build from bottom up)
         var sortedBlocks = new List<BlockData>(currentStructure.blocks);
-        sortedBlocks.Sort((a, b) => a.position.y.CompareTo(b.position.y));
+        sortedBlocks.Sort((a, b) => a.relativePosition.y.CompareTo(b.relativePosition.y));
 
         // Group nearby blocks if optimization enabled
         if (groupNearbyOperations)
@@ -73,7 +73,7 @@ public class TurtleBuildingManager : MonoBehaviour
 
         foreach (var structureBlock in sortedBlocks)
         {
-            Vector3 worldPos = currentBuildOrigin + (Vector3)structureBlock.position;
+            Vector3 worldPos = currentBuildOrigin + (Vector3)structureBlock.relativePosition;
             
             yield return StartCoroutine(PlaceBlockWithPositioning(worldPos, structureBlock.blockType));
 
@@ -199,11 +199,11 @@ public class TurtleBuildingManager : MonoBehaviour
             
             // Find nearest remaining block within grouping distance
             int nearestIndex = 0;
-            float nearestDistance = Vector3.Distance(current.position, remaining[0].position);
+            float nearestDistance = Vector3.Distance(current.relativePosition, remaining[0].relativePosition);
             
             for (int i = 1; i < remaining.Count; i++)
             {
-                float distance = Vector3.Distance(current.position, remaining[i].position);
+                float distance = Vector3.Distance(current.relativePosition, remaining[i].relativePosition);
                 if (distance < nearestDistance && distance <= operationGroupingDistance)
                 {
                     nearestDistance = distance;

@@ -44,7 +44,7 @@ public class RTSController : MonoBehaviour
         {
             HandleSelection();
 
-            if (status.fuelLevel <= 2000 && !isRefueling && !isMoving)
+            if (status.fuel <= 2000 && !isRefueling && !isMoving)
             {
                 // Wenn Fuel-Level niedrig, starte Refuel
                 if (useTeleportForRefuel)
@@ -193,14 +193,14 @@ public class RTSController : MonoBehaviour
 
         // Warten, bis Turtle genug getankt hat (Timeout: 20s)
         float timer = 0f;
-        while (status.fuelLevel <= 2500 && timer < 20f)
+        while (status.fuel <= 2500 && timer < 20f)
         {
             yield return GetStatusFromServer();
             yield return new WaitForSeconds(1f);
             timer += 1f;
         }
 
-        Debug.Log("Refuel abgeschlossen. Aktuelles Fuel: " + status.fuelLevel);
+        Debug.Log("Refuel abgeschlossen. Aktuelles Fuel: " + status.fuel);
 
         // Zur letzten Zielposition zurück (falls vorhanden)
         if (lastTargetPos.HasValue)
@@ -334,7 +334,7 @@ public class RTSController : MonoBehaviour
         }
     }
 
-    public bool IsBusy() => status.isBusy;
+    public bool IsBusy() => status.status != null && status.status.ToLower() != "idle";
 }
 
 [System.Serializable]

@@ -12,11 +12,15 @@ public class AreaSelectionVisualizer : MonoBehaviour
     public GameObject selectionMarkerPrefab;
     public GameObject boundingBoxPrefab;
 
+    [Header("Materials")]
+    public Material selectionMaterial;
+
     [Header("Colors")]
     public Color miningColor = new Color(1f, 0.3f, 0.2f, 0.5f);
     public Color buildingColor = new Color(0.2f, 1f, 0.3f, 0.5f);
     public Color persistentColor = new Color(0.8f, 0.8f, 0.2f, 0.6f);
     public Color invalidColor = new Color(0.5f, 0.5f, 0.5f, 0.3f);
+    public Color validColor = new Color(0.2f, 1f, 0.3f, 0.6f);
 
     [Header("Settings")]
     public bool showPersistentMarkers = true;
@@ -308,6 +312,57 @@ public class AreaSelectionVisualizer : MonoBehaviour
         CreateBoundingBox(blocks, AreaSelectionManager.SelectionMode.Building);
 
         Debug.Log($"Adapted selection for structure of size {structureSize}");
+    }
+
+    // Compatibility methods for AreaSelectionManager
+    public void SetMode(AreaSelectionManager.SelectionMode mode)
+    {
+        // Mode is already handled by OnAreaSelected
+    }
+
+    public void UpdateSelectionBox(Vector3 start, Vector3 end, AreaSelectionManager.SelectionMode mode)
+    {
+        // Create visualization between two points
+        List<Vector3> blocks = new List<Vector3>();
+
+        Vector3Int min = new Vector3Int(
+            Mathf.FloorToInt(Mathf.Min(start.x, end.x)),
+            Mathf.FloorToInt(Mathf.Min(start.y, end.y)),
+            Mathf.FloorToInt(Mathf.Min(start.z, end.z))
+        );
+
+        Vector3Int max = new Vector3Int(
+            Mathf.FloorToInt(Mathf.Max(start.x, end.x)),
+            Mathf.FloorToInt(Mathf.Max(start.y, end.y)),
+            Mathf.FloorToInt(Mathf.Max(start.z, end.z))
+        );
+
+        for (int x = min.x; x <= max.x; x++)
+        {
+            for (int y = min.y; y <= max.y; y++)
+            {
+                for (int z = min.z; z <= max.z; z++)
+                {
+                    blocks.Add(new Vector3(x, y, z));
+                }
+            }
+        }
+
+        ClearCurrentSelection();
+        VisualizeSelection(blocks, mode);
+        CreateBoundingBox(blocks, mode);
+    }
+
+    public void UpdateVisualization(List<Vector3> blocks, AreaSelectionManager.SelectionMode mode)
+    {
+        ClearCurrentSelection();
+        VisualizeSelection(blocks, mode);
+        CreateBoundingBox(blocks, mode);
+    }
+
+    public void ClearVisualization()
+    {
+        ClearCurrentSelection();
     }
 
     private void OnDestroy()
