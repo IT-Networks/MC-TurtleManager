@@ -597,14 +597,14 @@ public class AreaSelectionManager : MonoBehaviour
         
         if (showBlockValidation)
         {
-            visualizer?.UpdateVisualization(selectedBlocks, validBlocks, invalidBlocks, optimizedOrder);
+            visualizer?.UpdateVisualization(selectedBlocks, currentMode);
         }
     }
     
     private void CreateVisualization()
     {
         ClearVisualization();
-        visualizer?.UpdateVisualization(selectedBlocks, validBlocks, invalidBlocks, optimizedOrder);
+        visualizer?.UpdateVisualization(selectedBlocks, currentMode);
     }
     
     private void ClearVisualization()
