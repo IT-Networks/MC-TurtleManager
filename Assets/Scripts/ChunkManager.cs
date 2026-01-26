@@ -14,7 +14,7 @@ public class ChunkManager
     public readonly Vector2Int coord;
     public readonly int chunkSize;
     public readonly TurtleWorldManager manager;
-    
+
     private Coroutine loadedCoroutine;
     public GameObject _go;
     private MeshFilter _mf;
@@ -22,12 +22,15 @@ public class ChunkManager
     private MeshCollider _mc;
     private ChunkInfo chunk;
 
+    // Thread-safe loaded flag (can be accessed from background threads)
+    private volatile bool _isLoaded = false;
+
     // Specialized components
     private readonly ChunkCache cache;
     private readonly ChunkJsonParser jsonParser;
     private readonly ChunkMeshBuilder meshBuilder;
     private readonly ChunkUVProvider uvProvider;
-    
+
     // Block-Management Eigenschaften
     private ChunkMeshData currentMeshData;
     private bool isRegenerating = false;
@@ -199,6 +202,7 @@ public class ChunkManager
         _mc = null;
         chunk = null;
         currentMeshData = null;
+        _isLoaded = false;
     }
 
     public IEnumerator LoadAndSpawnChunk(int batchVerticesPerFrame = 10000)
@@ -430,6 +434,9 @@ public class ChunkManager
         _mr.sharedMaterials = materials;
         _mc.sharedMesh = mesh;
 
+        // Mark as loaded (thread-safe flag)
+        _isLoaded = true;
+
         Debug.Log($"Chunk {coord}: Mesh applied with {prepared.SubmeshCount} submeshes and {prepared.totalVertexCount} vertices");
     }
 
@@ -579,7 +586,7 @@ public class ChunkManager
     }
 
     // Properties
-    public bool IsLoaded => _go != null && _mf != null && _mf.sharedMesh != null;
+    public bool IsLoaded => _isLoaded;
     public bool IsRegenerating => isRegenerating;
     public int VertexCount => _mf?.sharedMesh?.vertexCount ?? 0;
     public int SubmeshCount => _mf?.sharedMesh?.subMeshCount ?? 0;
