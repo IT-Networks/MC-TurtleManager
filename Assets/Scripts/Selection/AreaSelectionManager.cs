@@ -57,6 +57,7 @@ public class AreaSelectionManager : MonoBehaviour
     public float raycastDistance = 1000f;
     public bool showBlockValidation = true;
     public bool previewOptimization = true;
+    public bool enableKeyboardInput = false; // Set to false when using ModernUIManager
     
     [Header("Visual Settings")]
     public Material selectionMaterial;
@@ -158,13 +159,16 @@ public class AreaSelectionManager : MonoBehaviour
     
     private void HandleInput()
     {
-        // Mode switching
-        if (Input.GetKeyDown(KeyCode.M))
-            ToggleMode(SelectionMode.Mining);
-        else if (Input.GetKeyDown(KeyCode.B))
-            ToggleMode(SelectionMode.Building);
-        else if (Input.GetKeyDown(KeyCode.Escape))
-            CancelSelection();
+        // Mode switching (only if keyboard input is enabled)
+        if (enableKeyboardInput)
+        {
+            if (Input.GetKeyDown(KeyCode.M))
+                ToggleMode(SelectionMode.Mining);
+            else if (Input.GetKeyDown(KeyCode.B))
+                ToggleMode(SelectionMode.Building);
+            else if (Input.GetKeyDown(KeyCode.Escape))
+                CancelSelection();
+        }
         
         // Selection handling
         if (currentMode != SelectionMode.None)

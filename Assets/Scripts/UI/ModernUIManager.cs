@@ -35,6 +35,14 @@ public class ModernUIManager : MonoBehaviour
     public KeyCode contextMenuKey = KeyCode.Mouse1; // Right-click
     public bool enableHotkeys = true;
 
+    // Hotkey Reference:
+    // M - Toggle Mining Mode
+    // B - Toggle Building Mode / Structure Selection
+    // T - Toggle Turtle List Panel
+    // Q - Toggle Task Queue Panel
+    // ESC - Close all panels / Cancel selection
+    // Right-Click - Context Menu
+
     private static ModernUIManager _instance;
     public static ModernUIManager Instance => _instance;
 
@@ -153,15 +161,34 @@ public class ModernUIManager : MonoBehaviour
             ToggleTaskQueue();
         }
 
+        if (Input.GetKeyDown(KeyCode.M))
+        {
+            // Toggle mining mode in area selection manager
+            if (areaSelectionManager != null)
+            {
+                areaSelectionManager.ToggleMode(AreaSelectionManager.SelectionMode.Mining);
+            }
+        }
+
         if (Input.GetKeyDown(KeyCode.B))
         {
             ToggleStructureSelection();
+            // Also toggle building mode in area selection manager
+            if (areaSelectionManager != null)
+            {
+                areaSelectionManager.ToggleMode(AreaSelectionManager.SelectionMode.Building);
+            }
         }
 
         // ESC to close all panels
         if (Input.GetKeyDown(KeyCode.Escape))
         {
             CloseAllPanels();
+            // Also cancel selection
+            if (areaSelectionManager != null)
+            {
+                areaSelectionManager.CancelSelection();
+            }
         }
     }
 
