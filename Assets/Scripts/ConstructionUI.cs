@@ -454,36 +454,8 @@ public class ConstructionUI : MonoBehaviour
     }
     
     // Keyboard shortcuts
-    private void OnGUI()
-    {
-        Event e = Event.current;
-        if (e.type == EventType.KeyDown)
-        {
-            switch (e.keyCode)
-            {
-                case KeyCode.M:
-                    ToggleSelectionMode(AreaSelectionManager.SelectionMode.Mining);
-                    break;
-                case KeyCode.B:
-                    ToggleSelectionMode(AreaSelectionManager.SelectionMode.Building);
-                    break;
-                case KeyCode.Return:
-                    if (executeOperationButton != null && executeOperationButton.interactable)
-                        ExecuteSelectedOperation();
-                    break;
-                case KeyCode.Escape:
-                    CancelSelection();
-                    break;
-                case KeyCode.R:
-                    // Show system health report
-                    if (turtleMainController != null)
-                    {
-                        Debug.Log(turtleMainController.GetSystemHealthReport());
-                    }
-                    break;
-            }
-        }
-    }
+    // NOTE: Hotkeys moved to ModernUIManager to avoid conflicts
+    // This UI is controlled by ModernUIManager's structure selection panel
     
     private void OnDestroy()
     {

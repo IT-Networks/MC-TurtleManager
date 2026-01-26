@@ -18,6 +18,7 @@ public class ConstructionUIBuilder : MonoBehaviour
     
     [Header("References")]
     public ConstructionUI constructionUI;
+    public ModernUIManager modernUIManager;
     
     private Canvas mainCanvas;
     private GameObject eventSystem;
@@ -43,6 +44,8 @@ public class ConstructionUIBuilder : MonoBehaviour
         BuildConstructionPanel();
         BuildStructureSelectionPanel();
         BuildOperationStatusPanel();
+        BuildTurtleListPanel();
+        BuildTaskQueuePanel();
         
         // Setup ConstructionUI component
         SetupConstructionUIReferences();
@@ -192,6 +195,107 @@ public class ConstructionUIBuilder : MonoBehaviour
             new Vector2(80, -100), new Vector2(120, 30), new Color(0.6f, 0.4f, 0.2f));
         
         // Initially hidden
+        panel.SetActive(false);
+    }
+
+    private void BuildTurtleListPanel()
+    {
+        // Create turtle list panel
+        GameObject panel = CreatePanel("TurtleListPanel", new Vector2(-450, -300), new Vector2(350, 250));
+
+        if (modernUIManager != null)
+            modernUIManager.turtleListPanel = panel;
+
+        // Title
+        CreateText(panel, "TurtleListTitle", "Available Turtles (T)", new Vector2(0, 100), new Vector2(300, 30), 16, TextAnchor.MiddleCenter);
+
+        // Turtle count
+        CreateText(panel, "TurtleCount", "Turtles: 0 / 0 Active", new Vector2(0, 70), new Vector2(300, 20), 12, TextAnchor.MiddleCenter);
+
+        // Scrollable list area (placeholder for dynamic turtle entries)
+        GameObject scrollArea = new GameObject("TurtleScrollArea");
+        scrollArea.transform.SetParent(panel.transform, false);
+
+        RectTransform scrollRect = scrollArea.AddComponent<RectTransform>();
+        scrollRect.anchoredPosition = new Vector2(0, -10);
+        scrollRect.sizeDelta = new Vector2(320, 150);
+
+        Image scrollBg = scrollArea.AddComponent<Image>();
+        scrollBg.color = new Color(0.05f, 0.05f, 0.05f, 0.8f);
+
+        // Info text
+        CreateText(scrollArea, "TurtleListInfo", "Turtles will appear here...\nClick to select\nDouble-click to focus camera",
+            new Vector2(0, 0), new Vector2(300, 100), 10, TextAnchor.MiddleCenter);
+
+        // Control buttons
+        CreateButton(panel, "RefreshTurtlesButton", "Refresh (R)",
+            new Vector2(-80, -100), new Vector2(120, 25), new Color(0.2f, 0.4f, 0.6f));
+
+        CreateButton(panel, "SelectAllTurtlesButton", "Select All",
+            new Vector2(80, -100), new Vector2(120, 25), new Color(0.2f, 0.6f, 0.2f));
+
+        // Initially visible (toggle with T key)
+        panel.SetActive(true);
+    }
+
+    private void BuildTaskQueuePanel()
+    {
+        // Create task queue panel
+        GameObject panel = CreatePanel("TaskQueuePanel", new Vector2(450, 200), new Vector2(350, 400));
+
+        if (modernUIManager != null)
+            modernUIManager.taskQueuePanel = panel;
+
+        // Title
+        CreateText(panel, "TaskQueueTitle", "Task Queue (Q)", new Vector2(0, 175), new Vector2(300, 30), 16, TextAnchor.MiddleCenter);
+
+        // Task stats
+        CreateText(panel, "TaskStats", "Active: 0 | Pending: 0 | Completed: 0",
+            new Vector2(0, 145), new Vector2(320, 20), 11, TextAnchor.MiddleCenter);
+
+        // Priority section
+        CreateText(panel, "PriorityLabel", "High Priority Tasks:", new Vector2(-120, 110), new Vector2(150, 20), 12, TextAnchor.MiddleLeft);
+
+        GameObject highPriorityArea = new GameObject("HighPriorityArea");
+        highPriorityArea.transform.SetParent(panel.transform, false);
+
+        RectTransform highPriorityRect = highPriorityArea.AddComponent<RectTransform>();
+        highPriorityRect.anchoredPosition = new Vector2(0, 60);
+        highPriorityRect.sizeDelta = new Vector2(320, 80);
+
+        Image highPriorityBg = highPriorityArea.AddComponent<Image>();
+        highPriorityBg.color = new Color(0.3f, 0.1f, 0.1f, 0.5f);
+
+        CreateText(highPriorityArea, "HighPriorityInfo", "No high priority tasks",
+            new Vector2(0, 0), new Vector2(300, 60), 10, TextAnchor.MiddleCenter);
+
+        // Normal tasks section
+        CreateText(panel, "NormalLabel", "Normal Tasks:", new Vector2(-120, 10), new Vector2(150, 20), 12, TextAnchor.MiddleLeft);
+
+        GameObject normalTaskArea = new GameObject("NormalTaskArea");
+        normalTaskArea.transform.SetParent(panel.transform, false);
+
+        RectTransform normalTaskRect = normalTaskArea.AddComponent<RectTransform>();
+        normalTaskRect.anchoredPosition = new Vector2(0, -50);
+        normalTaskRect.sizeDelta = new Vector2(320, 120);
+
+        Image normalTaskBg = normalTaskArea.AddComponent<Image>();
+        normalTaskBg.color = new Color(0.05f, 0.05f, 0.05f, 0.8f);
+
+        CreateText(normalTaskArea, "NormalTaskInfo", "No tasks queued\n\nTasks will appear here when:\n- Mining operations start\n- Building operations start\n- Turtle movements queued",
+            new Vector2(0, 0), new Vector2(300, 100), 10, TextAnchor.MiddleCenter);
+
+        // Control buttons
+        CreateButton(panel, "PauseAllButton", "Pause All",
+            new Vector2(-110, -150), new Vector2(90, 25), new Color(0.6f, 0.4f, 0.2f));
+
+        CreateButton(panel, "ResumeAllButton", "Resume All",
+            new Vector2(0, -150), new Vector2(90, 25), new Color(0.2f, 0.6f, 0.2f));
+
+        CreateButton(panel, "ClearCompletedButton", "Clear Done",
+            new Vector2(110, -150), new Vector2(90, 25), new Color(0.4f, 0.4f, 0.4f));
+
+        // Initially hidden (toggle with Q key)
         panel.SetActive(false);
     }
 
@@ -525,6 +629,11 @@ public class ConstructionUIBuilder : MonoBehaviour
         if (constructionUI != null)
         {
             Debug.Log("ConstructionUI references have been automatically assigned");
+        }
+
+        if (modernUIManager != null)
+        {
+            Debug.Log("ModernUIManager references have been automatically assigned (TurtleList, TaskQueue)");
         }
     }
 
