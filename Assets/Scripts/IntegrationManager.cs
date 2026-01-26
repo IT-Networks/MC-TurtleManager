@@ -24,7 +24,7 @@ public class IntegrationManager : MonoBehaviour
     public AreaSelectionManager areaSelectionManager;
     public StructureManager structureManager;
     public ServerUpdateManager serverUpdateManager;
-    public ConstructionUI constructionUI;
+    public ModernUIManager modernUIManager;
     
     [Header("Auto-Setup")]
     public bool autoSetupComponents = true;
@@ -58,8 +58,11 @@ public class IntegrationManager : MonoBehaviour
         
         // Setup construction system components
         SetupConstructionComponents();
+
+        // Setup modern UI
+        SetupModernUI();
     }
-    
+
     private void FindOrCreateCoreComponents()
     {
         if (worldManager == null)
@@ -172,7 +175,6 @@ public class IntegrationManager : MonoBehaviour
         SetupAreaSelectionManager();
         SetupStructureManager();
         SetupServerUpdateManager();
-        SetupConstructionUI();
     }
     
     private void SetupAreaSelectionManager()
@@ -213,62 +215,33 @@ public class IntegrationManager : MonoBehaviour
         serverUpdateManager.worldManager = worldManager;
     }
     
-    private void SetupConstructionUI()
+    private void SetupModernUI()
     {
-        if (constructionUI == null && createUICanvas)
+        if (modernUIManager == null && createUICanvas)
         {
-            // Create UI Canvas
-            GameObject canvasObj = new GameObject("ConstructionCanvas");
-            canvasObj.transform.SetParent(transform);
-            
-            Canvas canvas = canvasObj.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 10;
-            
-            canvasObj.AddComponent<UnityEngine.UI.CanvasScaler>();
-            canvasObj.AddComponent<UnityEngine.UI.GraphicRaycaster>();
-            
-            // Add ConstructionUI component
-            constructionUI = canvasObj.AddComponent<ConstructionUI>();
-            constructionUI.mainCanvas = canvas;
-            
-            CreateUIElements(canvasObj);
+            // Create ModernUIManager GameObject
+            GameObject uiManagerObj = new GameObject("ModernUIManager");
+            uiManagerObj.transform.SetParent(transform);
+            modernUIManager = uiManagerObj.AddComponent<ModernUIManager>();
+
+            // Create ModernUIBuilder GameObject
+            GameObject uiBuilderObj = new GameObject("ModernUIBuilder");
+            uiBuilderObj.transform.SetParent(uiManagerObj.transform);
+            ModernUIBuilder uiBuilder = uiBuilderObj.AddComponent<ModernUIBuilder>();
+
+            // Setup references
+            uiBuilder.modernUIManager = modernUIManager;
+            uiBuilder.buildUIOnStart = false; // We'll build it manually
+
+            // Build the UI
+            uiBuilder.BuildCompleteUI();
+
+            Debug.Log("Modern UI system created successfully!");
         }
-    }
-    
-    private void CreateUIElements(GameObject canvasObj)
-    {
-        // Create basic UI structure
-        // Note: In a real project, you'd want to create this through a prefab or more detailed setup
-        
-        // Construction Panel
-        GameObject constructionPanel = CreateUIPanel(canvasObj, "ConstructionPanel", new Vector2(-300, 0), new Vector2(250, 400));
-        constructionUI.constructionPanel = constructionPanel;
-        
-        // Structure Selection Panel  
-        GameObject structurePanel = CreateUIPanel(canvasObj, "StructurePanel", new Vector2(0, 0), new Vector2(300, 300));
-        constructionUI.structureSelectionPanel = structurePanel;
-        
-        // Operation Status Panel
-        GameObject statusPanel = CreateUIPanel(canvasObj, "StatusPanel", new Vector2(300, -200), new Vector2(280, 200));
-        constructionUI.operationStatusPanel = statusPanel;
-        
-        Debug.Log("Basic UI structure created. You may want to customize the UI layout in the scene.");
-    }
-    
-    private GameObject CreateUIPanel(GameObject parent, string name, Vector2 anchoredPosition, Vector2 sizeDelta)
-    {
-        GameObject panel = new GameObject(name);
-        panel.transform.SetParent(parent.transform, false);
-        
-        RectTransform rect = panel.AddComponent<RectTransform>();
-        rect.anchoredPosition = anchoredPosition;
-        rect.sizeDelta = sizeDelta;
-        
-        UnityEngine.UI.Image image = panel.AddComponent<UnityEngine.UI.Image>();
-        image.color = new Color(0, 0, 0, 0.7f); // Semi-transparent black
-        
-        return panel;
+        else if (modernUIManager != null)
+        {
+            Debug.Log("ModernUIManager already assigned.");
+        }
     }
     
     private void SetupIntegrations()
@@ -278,16 +251,29 @@ public class IntegrationManager : MonoBehaviour
         {
             areaSelectionManager.turtleMainController = turtleMainController;
         }
-        
-        // Connect construction UI to all managers (updated for new architecture)
-        if (constructionUI != null)
+
+        // Connect Modern UI Manager to all managers
+        if (modernUIManager != null)
         {
-            constructionUI.areaManager = areaSelectionManager;
-            constructionUI.structureManager = structureManager;
-            constructionUI.turtleMainController = turtleMainController; // Updated reference
+            modernUIManager.areaSelectionManager = areaSelectionManager;
+            modernUIManager.structureManager = structureManager;
+            modernUIManager.cameraController = cameraController;
+
+            // Initialize UI panels with references
+            if (modernUIManager.turtleList != null)
+            {
+                // TurtleList will need MultiTurtleManager reference
+                // This can be set up when MultiTurtleManager is available
+            }
+
+            if (modernUIManager.taskQueue != null)
+            {
+                // TaskQueue will need MultiTurtleManager reference
+                // This can be set up when MultiTurtleManager is available
+            }
         }
-        
-        Debug.Log("Construction system integration with new turtle architecture completed!");
+
+        Debug.Log("Modern UI system integration with new turtle architecture completed!");
     }
     
     private void ValidateSetup()
@@ -329,10 +315,10 @@ public class IntegrationManager : MonoBehaviour
         {
             Debug.LogWarning("StructureManager not found - building functionality will be limited");
         }
-        
-        if (constructionUI == null)
+
+        if (modernUIManager == null)
         {
-            Debug.LogWarning("ConstructionUI not found - no UI interface available");
+            Debug.LogWarning("ModernUIManager not found - no UI interface available");
         }
         
         if (hasErrors)
@@ -543,10 +529,10 @@ public class IntegrationManager : MonoBehaviour
         {
             Debug.LogError("AreaSelectionManager is missing - selection functionality unavailable");
         }
-        
-        if (constructionUI == null)
+
+        if (modernUIManager == null)
         {
-            Debug.LogWarning("ConstructionUI is missing - no user interface available");
+            Debug.LogWarning("ModernUIManager is missing - no user interface available");
         }
     }
     
