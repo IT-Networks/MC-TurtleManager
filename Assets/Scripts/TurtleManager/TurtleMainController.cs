@@ -278,7 +278,23 @@ public class TurtleMainController : MonoBehaviour
     /// </summary>
     public TurtleStatus GetTurtleStatus()
     {
-        return baseManager?.GetCurrentStatus();
+        var baseStatus = baseManager?.GetCurrentStatus();
+        if (baseStatus == null)
+            return new TurtleStatus();
+
+        // Convert TurtleBaseStatus to TurtleStatus
+        return new TurtleStatus
+        {
+            label = baseStatus.label,
+            direction = baseStatus.direction,
+            position = new Vector3Int(
+                (int)baseStatus.position.x,
+                (int)baseStatus.position.y,
+                (int)baseStatus.position.z
+            ),
+            fuel = baseStatus.fuelLevel,
+            status = baseStatus.isBusy ? "busy" : "idle"
+        };
     }
 
     /// <summary>
@@ -433,7 +449,7 @@ public static class TurtleMainControllerExtensions
         bool canBuild = true;
         foreach (var block in structure.blocks)
         {
-            Vector3 worldPos = buildOrigin + (Vector3)block.position;
+            Vector3 worldPos = buildOrigin + (Vector3)block.relativePosition;
             if (!controller.CanPlaceBlockAt(worldPos))
             {
                 Debug.LogWarning($"Cannot place block at {worldPos} - position occupied or invalid");

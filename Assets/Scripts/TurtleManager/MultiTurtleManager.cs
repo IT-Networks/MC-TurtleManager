@@ -171,7 +171,7 @@ public class MultiTurtleManager : MonoBehaviour
     {
         // Add base manager
         var baseManager = turtleObj.AddComponent<TurtleBaseManager>();
-        baseManager.defaultTurtleId = turtleId;
+        baseManager.defaultTurtleId = turtleId.ToString();
 
         // Add other managers as needed
         turtleObj.AddComponent<TurtleMovementManager>();
