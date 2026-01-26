@@ -88,8 +88,8 @@ public class TurtleWorldManager : MonoBehaviour
     private GameObject turtleInstance;
 
     [Serializable] public class TurtlePosition { public float x, y, z; }
-    [Serializable] public class TurtleStatus { public string label; public string direction; public TurtlePosition position; }
-    [Serializable] public class StatusWrapper { public List<TurtleStatus> entries; }
+    [Serializable] public class TurtleWorldStatus { public string label; public string direction; public TurtlePosition position; }
+    [Serializable] public class StatusWrapper { public List<TurtleWorldStatus> entries; }
     [Serializable]
     public class BlockTextureData
     {
