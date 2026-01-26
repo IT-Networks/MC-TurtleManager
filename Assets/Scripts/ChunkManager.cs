@@ -236,12 +236,26 @@ public class ChunkManager
 
                     // Build mesh on background thread
                     PreparedChunkMesh cachedMesh = null;
+                    string errorMessage = null;
                     Task buildTask = Task.Run(() =>
                     {
-                        cachedMesh = meshBuilder.BuildMeshFromData(cachedData, chunk);
+                        try
+                        {
+                            cachedMesh = meshBuilder.BuildMeshFromData(cachedData, chunk);
+                        }
+                        catch (System.Exception ex)
+                        {
+                            errorMessage = $"Exception during cached mesh building: {ex.Message}\n{ex.StackTrace}";
+                        }
                     });
 
                     yield return new WaitUntil(() => buildTask.IsCompleted);
+
+                    if (cachedMesh == null)
+                    {
+                        Debug.LogError($"Chunk {coord}: Failed to build mesh from cached data. {errorMessage}");
+                        yield break;
+                    }
 
                     yield return CoroutineHelper.Instance.StartCoroutine(ApplyPreparedMesh(cachedMesh, batchVerticesPerFrame));
 
@@ -256,12 +270,26 @@ public class ChunkManager
 
                 // Build mesh on background thread
                 PreparedChunkMesh cachedMesh = null;
+                string errorMessage = null;
                 Task buildTask = Task.Run(() =>
                 {
-                    cachedMesh = meshBuilder.BuildMeshFromData(cachedData, chunk);
+                    try
+                    {
+                        cachedMesh = meshBuilder.BuildMeshFromData(cachedData, chunk);
+                    }
+                    catch (System.Exception ex)
+                    {
+                        errorMessage = $"Exception during cached mesh building: {ex.Message}\n{ex.StackTrace}";
+                    }
                 });
 
                 yield return new WaitUntil(() => buildTask.IsCompleted);
+
+                if (cachedMesh == null)
+                {
+                    Debug.LogError($"Chunk {coord}: Failed to build mesh from cached data. {errorMessage}");
+                    yield break;
+                }
 
                 yield return CoroutineHelper.Instance.StartCoroutine(ApplyPreparedMesh(cachedMesh, batchVerticesPerFrame));
 

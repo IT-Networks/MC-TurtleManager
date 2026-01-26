@@ -18,7 +18,7 @@ Shader "HDRP/Block"
         _LeftColor ("Left Color", Color) = (1,1,1,1)
         _RightColor ("Right Color", Color) = (1,1,1,1)
 
-        // HDRP Properties
+        // Material Properties
         _Smoothness ("Smoothness", Range(0.0, 1.0)) = 0.5
         _Metallic ("Metallic", Range(0.0, 1.0)) = 0.0
     }
@@ -31,12 +31,12 @@ Shader "HDRP/Block"
             "RenderType" = "Opaque"
             "Queue" = "Geometry"
         }
-        LOD 300
 
+        // Main Forward Pass
         Pass
         {
-            Name "ForwardLit"
-            Tags { "LightMode" = "Forward" }
+            Name "ForwardOnly"
+            Tags { "LightMode" = "ForwardOnly" }
 
             Cull Back
             ZWrite On
@@ -49,12 +49,10 @@ Shader "HDRP/Block"
             #pragma vertex Vert
             #pragma fragment Frag
 
-            // HDRP includes
+            // Core HDRP includes
             #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
-            #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/CommonMaterial.hlsl"
+            #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
             #include "Packages/com.unity.render-pipelines.high-definition/Runtime/ShaderLibrary/ShaderVariables.hlsl"
-            #include "Packages/com.unity.render-pipelines.high-definition/Runtime/Material/Material.hlsl"
-            #include "Packages/com.unity.render-pipelines.high-definition/Runtime/Lighting/Lighting.hlsl"
 
             TEXTURE2D(_TopTex);
             SAMPLER(sampler_TopTex);
@@ -69,6 +67,7 @@ Shader "HDRP/Block"
             TEXTURE2D(_RightTex);
             SAMPLER(sampler_RightTex);
 
+            CBUFFER_START(UnityPerMaterial)
             float4 _TopColor;
             float4 _BottomColor;
             float4 _FrontColor;
@@ -77,6 +76,7 @@ Shader "HDRP/Block"
             float4 _RightColor;
             float _Smoothness;
             float _Metallic;
+            CBUFFER_END
 
             struct Attributes
             {
@@ -110,7 +110,7 @@ Shader "HDRP/Block"
             {
                 float3 normalWS = normalize(input.normalWS);
 
-                // Determine dominant axis (exact one side will be 1)
+                // Determine dominant axis
                 float3 absNormal = abs(normalWS);
                 float3 majorAxis = step(absNormal.yzx, absNormal.xyz) * step(absNormal.zxy, absNormal.xyz);
 
@@ -137,8 +137,8 @@ Shader "HDRP/Block"
                                   colRight * rightMask +
                                   colLeft * leftMask;
 
-                // Simple lighting (directional light approximation)
-                float3 lightDir = normalize(float3(0.5, 1, 0.3));
+                // Use main directional light
+                float3 lightDir = _MainLightPosition.xyz;
                 float NdotL = saturate(dot(normalWS, lightDir));
                 float3 lighting = lerp(0.3, 1.0, NdotL); // Ambient + diffuse
 
@@ -148,7 +148,98 @@ Shader "HDRP/Block"
             }
             ENDHLSL
         }
+
+        // Shadow Caster Pass
+        Pass
+        {
+            Name "ShadowCaster"
+            Tags { "LightMode" = "ShadowCaster" }
+
+            ZWrite On
+            ZTest LEqual
+            ColorMask 0
+            Cull Back
+
+            HLSLPROGRAM
+            #pragma target 4.5
+            #pragma only_renderers d3d11 playstation xboxone xboxseries vulkan metal switch
+
+            #pragma vertex ShadowVert
+            #pragma fragment ShadowFrag
+
+            #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
+            #include "Packages/com.unity.render-pipelines.high-definition/Runtime/ShaderLibrary/ShaderVariables.hlsl"
+
+            struct Attributes
+            {
+                float4 positionOS : POSITION;
+                float3 normalOS : NORMAL;
+            };
+
+            struct Varyings
+            {
+                float4 positionCS : SV_POSITION;
+            };
+
+            Varyings ShadowVert(Attributes input)
+            {
+                Varyings output;
+                float3 positionWS = TransformObjectToWorld(input.positionOS.xyz);
+                output.positionCS = TransformWorldToHClip(positionWS);
+                return output;
+            }
+
+            half4 ShadowFrag(Varyings input) : SV_Target
+            {
+                return 0;
+            }
+            ENDHLSL
+        }
+
+        // DepthOnly Pass
+        Pass
+        {
+            Name "DepthOnly"
+            Tags { "LightMode" = "DepthOnly" }
+
+            ZWrite On
+            ColorMask 0
+
+            HLSLPROGRAM
+            #pragma target 4.5
+            #pragma only_renderers d3d11 playstation xboxone xboxseries vulkan metal switch
+
+            #pragma vertex DepthVert
+            #pragma fragment DepthFrag
+
+            #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
+            #include "Packages/com.unity.render-pipelines.high-definition/Runtime/ShaderLibrary/ShaderVariables.hlsl"
+
+            struct Attributes
+            {
+                float4 positionOS : POSITION;
+            };
+
+            struct Varyings
+            {
+                float4 positionCS : SV_POSITION;
+            };
+
+            Varyings DepthVert(Attributes input)
+            {
+                Varyings output;
+                float3 positionWS = TransformObjectToWorld(input.positionOS.xyz);
+                output.positionCS = TransformWorldToHClip(positionWS);
+                return output;
+            }
+
+            half4 DepthFrag(Varyings input) : SV_Target
+            {
+                return 0;
+            }
+            ENDHLSL
+        }
     }
 
-    Fallback "Hidden/HDRP/FallbackError"
+    Fallback Off
 }
