@@ -39,10 +39,10 @@ public class TurtleWorldManager : MonoBehaviour
     [Header("Movement-Based Prioritization")]
     [Tooltip("Prioritize chunks in camera movement direction (like Minecraft)")]
     public bool useMovementPrioritization = true;
-    [Tooltip("Cancel current loading and restart when camera moves")]
-    public bool cancelLoadingOnMovement = true;
+    [Tooltip("Cancel current loading and restart when camera moves (can cause incomplete loading)")]
+    public bool cancelLoadingOnMovement = false;
     [Tooltip("Minimum camera movement to trigger reprioritization")]
-    public float movementThreshold = 0.5f;
+    public float movementThreshold = 2f;
 
     [Header("Chunk Pooling & Caching")]
     [Tooltip("Enable chunk pooling for performance")]
@@ -306,10 +306,14 @@ public class TurtleWorldManager : MonoBehaviour
             }
 
             // Check if camera moved significantly - abort if movement prioritization enabled
+            // Only abort if camera moved more than 2 chunks to avoid cancelling too frequently
             if (useMovementPrioritization && cancelLoadingOnMovement && _movementTracker != null && _movementTracker.IsMoving)
             {
                 float distanceMoved = Vector3.Distance(_lastCameraPosition, camPos);
-                if (distanceMoved > movementThreshold)
+                float chunkDistance = distanceMoved / chunkSize;
+
+                // Only abort if moved more than 2 chunk distances
+                if (chunkDistance > 2f)
                 {
                     _isLoadingChunks = false;
                     yield break; // Will be restarted by ChunkStreamingLoop
@@ -737,26 +741,67 @@ public class TurtleWorldManager : MonoBehaviour
 
             if (req.result == UnityWebRequest.Result.Success)
             {
-                var parsed = Newtonsoft.Json.JsonConvert.DeserializeObject<StatusWrapper>(req.downloadHandler.text);
-                if (parsed?.entries == null) { yield return new WaitForSeconds(2f); continue; }
-
-                foreach (var status in parsed.entries)
+                // Try to deserialize as array first (newer API format)
+                try
                 {
-                    Vector3 pos = new(-status.position.x, status.position.y, status.position.z);
-                    if (turtleInstance == null)
+                    var statusArray = Newtonsoft.Json.JsonConvert.DeserializeObject<List<TurtleWorldStatus>>(req.downloadHandler.text);
+                    if (statusArray == null || statusArray.Count == 0)
                     {
-                        turtleInstance = Instantiate(turtlePrefab, pos, Quaternion.identity);
-                        turtleInstance.name = status.label;
-                        turtleInstance.transform.rotation = Quaternion.LookRotation(DirectionToVector(status.direction));
+                        yield return new WaitForSeconds(2f);
+                        continue;
                     }
-                    else
+
+                    foreach (var status in statusArray)
                     {
-                        var rts = turtleInstance.GetComponent<RTSController>();
-                        if (rts == null || !rts.isMoving)
+                        Vector3 pos = new(-status.position.x, status.position.y, status.position.z);
+                        if (turtleInstance == null)
                         {
-                            turtleInstance.transform.position = pos;
+                            turtleInstance = Instantiate(turtlePrefab, pos, Quaternion.identity);
+                            turtleInstance.name = status.label;
                             turtleInstance.transform.rotation = Quaternion.LookRotation(DirectionToVector(status.direction));
                         }
+                        else
+                        {
+                            var rts = turtleInstance.GetComponent<RTSController>();
+                            if (rts == null || !rts.isMoving)
+                            {
+                                turtleInstance.transform.position = pos;
+                                turtleInstance.transform.rotation = Quaternion.LookRotation(DirectionToVector(status.direction));
+                            }
+                        }
+                    }
+                }
+                catch (Newtonsoft.Json.JsonException)
+                {
+                    // Fall back to old format with wrapper
+                    try
+                    {
+                        var parsed = Newtonsoft.Json.JsonConvert.DeserializeObject<StatusWrapper>(req.downloadHandler.text);
+                        if (parsed?.entries == null) { yield return new WaitForSeconds(2f); continue; }
+
+                        foreach (var status in parsed.entries)
+                        {
+                            Vector3 pos = new(-status.position.x, status.position.y, status.position.z);
+                            if (turtleInstance == null)
+                            {
+                                turtleInstance = Instantiate(turtlePrefab, pos, Quaternion.identity);
+                                turtleInstance.name = status.label;
+                                turtleInstance.transform.rotation = Quaternion.LookRotation(DirectionToVector(status.direction));
+                            }
+                            else
+                            {
+                                var rts = turtleInstance.GetComponent<RTSController>();
+                                if (rts == null || !rts.isMoving)
+                                {
+                                    turtleInstance.transform.position = pos;
+                                    turtleInstance.transform.rotation = Quaternion.LookRotation(DirectionToVector(status.direction));
+                                }
+                            }
+                        }
+                    }
+                    catch (System.Exception ex)
+                    {
+                        Debug.LogWarning($"Failed to parse turtle status: {ex.Message}");
                     }
                 }
             }
