@@ -741,72 +741,69 @@ public class TurtleWorldManager : MonoBehaviour
 
             if (req.result == UnityWebRequest.Result.Success)
             {
-                // Try to deserialize as array first (newer API format)
-                try
-                {
-                    var statusArray = Newtonsoft.Json.JsonConvert.DeserializeObject<List<TurtleWorldStatus>>(req.downloadHandler.text);
-                    if (statusArray == null || statusArray.Count == 0)
-                    {
-                        yield return new WaitForSeconds(2f);
-                        continue;
-                    }
+                // Parse turtle status (supports both array and object formats)
+                List<TurtleWorldStatus> statusList = ParseTurtleStatusJson(req.downloadHandler.text);
 
-                    foreach (var status in statusArray)
+                if (statusList == null || statusList.Count == 0)
+                {
+                    yield return new WaitForSeconds(2f);
+                    continue;
+                }
+
+                foreach (var status in statusList)
+                {
+                    Vector3 pos = new(-status.position.x, status.position.y, status.position.z);
+                    if (turtleInstance == null)
                     {
-                        Vector3 pos = new(-status.position.x, status.position.y, status.position.z);
-                        if (turtleInstance == null)
+                        turtleInstance = Instantiate(turtlePrefab, pos, Quaternion.identity);
+                        turtleInstance.name = status.label;
+                        turtleInstance.transform.rotation = Quaternion.LookRotation(DirectionToVector(status.direction));
+                    }
+                    else
+                    {
+                        var rts = turtleInstance.GetComponent<RTSController>();
+                        if (rts == null || !rts.isMoving)
                         {
-                            turtleInstance = Instantiate(turtlePrefab, pos, Quaternion.identity);
-                            turtleInstance.name = status.label;
+                            turtleInstance.transform.position = pos;
                             turtleInstance.transform.rotation = Quaternion.LookRotation(DirectionToVector(status.direction));
                         }
-                        else
-                        {
-                            var rts = turtleInstance.GetComponent<RTSController>();
-                            if (rts == null || !rts.isMoving)
-                            {
-                                turtleInstance.transform.position = pos;
-                                turtleInstance.transform.rotation = Quaternion.LookRotation(DirectionToVector(status.direction));
-                            }
-                        }
-                    }
-                }
-                catch (Newtonsoft.Json.JsonException)
-                {
-                    // Fall back to old format with wrapper
-                    try
-                    {
-                        var parsed = Newtonsoft.Json.JsonConvert.DeserializeObject<StatusWrapper>(req.downloadHandler.text);
-                        if (parsed?.entries == null) { yield return new WaitForSeconds(2f); continue; }
-
-                        foreach (var status in parsed.entries)
-                        {
-                            Vector3 pos = new(-status.position.x, status.position.y, status.position.z);
-                            if (turtleInstance == null)
-                            {
-                                turtleInstance = Instantiate(turtlePrefab, pos, Quaternion.identity);
-                                turtleInstance.name = status.label;
-                                turtleInstance.transform.rotation = Quaternion.LookRotation(DirectionToVector(status.direction));
-                            }
-                            else
-                            {
-                                var rts = turtleInstance.GetComponent<RTSController>();
-                                if (rts == null || !rts.isMoving)
-                                {
-                                    turtleInstance.transform.position = pos;
-                                    turtleInstance.transform.rotation = Quaternion.LookRotation(DirectionToVector(status.direction));
-                                }
-                            }
-                        }
-                    }
-                    catch (System.Exception ex)
-                    {
-                        Debug.LogWarning($"Failed to parse turtle status: {ex.Message}");
                     }
                 }
             }
             yield return new WaitForSeconds(2f);
         }
+    }
+
+    private List<TurtleWorldStatus> ParseTurtleStatusJson(string jsonText)
+    {
+        if (string.IsNullOrEmpty(jsonText))
+            return null;
+
+        try
+        {
+            // Try array format first (newer API)
+            var statusArray = Newtonsoft.Json.JsonConvert.DeserializeObject<List<TurtleWorldStatus>>(jsonText);
+            if (statusArray != null && statusArray.Count > 0)
+                return statusArray;
+        }
+        catch (Newtonsoft.Json.JsonException)
+        {
+            // Not array format, try object format
+        }
+
+        try
+        {
+            // Try object format with wrapper
+            var parsed = Newtonsoft.Json.JsonConvert.DeserializeObject<StatusWrapper>(jsonText);
+            if (parsed?.entries != null && parsed.entries.Count > 0)
+                return parsed.entries;
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogWarning($"Failed to parse turtle status JSON: {ex.Message}");
+        }
+
+        return null;
     }
 
     Vector3 DirectionToVector(string dir) => dir switch
