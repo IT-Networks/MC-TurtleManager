@@ -25,13 +25,13 @@ public class TurtleBaseManager : MonoBehaviour
     // Core state
     protected Queue<TurtleCommand> commandQueue = new Queue<TurtleCommand>();
     protected bool isExecutingCommands = false;
-    protected TurtleStatus currentTurtleStatus;
+    protected TurtleBaseStatus currentTurtleBaseStatus;
     public TurtleWorldManager worldManager;
 
     // Events
     public System.Action<string> OnCommandExecuted;
     public System.Action<string> OnCommandFailed;
-    public System.Action<TurtleStatus> OnStatusUpdated;
+    public System.Action<TurtleBaseStatus> OnStatusUpdated;
 
     protected virtual void Start()
     {
@@ -39,22 +39,22 @@ public class TurtleBaseManager : MonoBehaviour
         Application.runInBackground = true;
 
         worldManager = GetComponent<TurtleWorldManager>() ?? FindFirstObjectByType<TurtleWorldManager>();
-        StartCoroutine(UpdateTurtleStatus());
+        StartCoroutine(UpdateTurtleBaseStatus());
         StartCoroutine(ProcessCommandQueue());
     }
 
     #region Status Management
 
-    protected IEnumerator UpdateTurtleStatus()
+    protected IEnumerator UpdateTurtleBaseStatus()
     {
         while (true)
         {
-            yield return StartCoroutine(FetchTurtleStatus());
+            yield return StartCoroutine(FetchTurtleBaseStatus());
             yield return new WaitForSeconds(1f);
         }
     }
 
-    protected IEnumerator FetchTurtleStatus()
+    protected IEnumerator FetchTurtleBaseStatus()
     {
         using UnityWebRequest request = UnityWebRequest.Get(turtleStatusUrl + "/" + defaultTurtleId);
         yield return request.SendWebRequest();
@@ -69,7 +69,7 @@ public class TurtleBaseManager : MonoBehaviour
                 if (statusWrapper?.entries != null && statusWrapper.entries.Count > 0)
                 {
                     var status = statusWrapper.entries[0];
-                    var newStatus = new TurtleStatus
+                    var newStatus = new TurtleBaseStatus
                     {
                         label = status.label,
                         direction = status.direction,
@@ -82,16 +82,16 @@ public class TurtleBaseManager : MonoBehaviour
                         isBusy = false
                     };
 
-                    if (HasStatusChanged(currentTurtleStatus, newStatus))
+                    if (HasStatusChanged(currentTurtleBaseStatus, newStatus))
                     {
-                        currentTurtleStatus = newStatus;
-                        OnStatusUpdated?.Invoke(currentTurtleStatus);
+                        currentTurtleBaseStatus = newStatus;
+                        OnStatusUpdated?.Invoke(currentTurtleBaseStatus);
                         
                         if (debugCommands)
                         {
-                            Debug.Log($"Turtle Status Update: Pos({currentTurtleStatus.position.x}, " +
-                                     $"{currentTurtleStatus.position.y}, {currentTurtleStatus.position.z}), " +
-                                     $"Facing: {currentTurtleStatus.direction}");
+                            Debug.Log($"Turtle Status Update: Pos({currentTurtleBaseStatus.position.x}, " +
+                                     $"{currentTurtleBaseStatus.position.y}, {currentTurtleBaseStatus.position.z}), " +
+                                     $"Facing: {currentTurtleBaseStatus.direction}");
                         }
                     }
                 }
@@ -103,7 +103,7 @@ public class TurtleBaseManager : MonoBehaviour
         }
     }
 
-    private bool HasStatusChanged(TurtleStatus old, TurtleStatus newStatus)
+    private bool HasStatusChanged(TurtleBaseStatus old, TurtleBaseStatus newStatus)
     {
         if (old == null) return true;
         
@@ -163,7 +163,7 @@ public class TurtleBaseManager : MonoBehaviour
             if (IsMovementCommand(command.command))
             {
                 yield return new WaitForSeconds(positionUpdateDelay);
-                yield return StartCoroutine(FetchTurtleStatus());
+                yield return StartCoroutine(FetchTurtleBaseStatus());
             }
             
             if (debugCommands)
@@ -210,16 +210,16 @@ public class TurtleBaseManager : MonoBehaviour
 
     public Vector3 GetTurtlePosition()
     {
-        if (currentTurtleStatus == null) return Vector3.zero;
+        if (currentTurtleBaseStatus == null) return Vector3.zero;
         
         return new Vector3(
-            currentTurtleStatus.position.x + 1,
-            currentTurtleStatus.position.y,
-            currentTurtleStatus.position.z
+            currentTurtleBaseStatus.position.x + 1,
+            currentTurtleBaseStatus.position.y,
+            currentTurtleBaseStatus.position.z
         );
     }
 
-    public TurtleStatus GetCurrentStatus() => currentTurtleStatus;
+    public TurtleBaseStatus GetCurrentStatus() => currentTurtleBaseStatus;
     public int QueuedCommands => commandQueue.Count;
     public bool IsBusy => isExecutingCommands || commandQueue.Count > 0;
 
@@ -231,7 +231,7 @@ public class TurtleBaseManager : MonoBehaviour
         
         Debug.Log("Emergency stop executed");
 
-        StartCoroutine(UpdateTurtleStatus());
+        StartCoroutine(UpdateTurtleBaseStatus());
         StartCoroutine(ProcessCommandQueue());
     }
 
@@ -280,7 +280,7 @@ public class Position
 }
 
 [System.Serializable]
-public class TurtleStatus
+public class TurtleBaseStatus
 {
     public string label;
     public string direction;

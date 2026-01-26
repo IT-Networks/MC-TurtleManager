@@ -62,7 +62,7 @@ public class TurtleBuildingManager : MonoBehaviour
         }
 
         // Sort blocks by Y coordinate (build from bottom up)
-        var sortedBlocks = new List<StructureData.StructureBlock>(currentStructure.blocks);
+        var sortedBlocks = new List<BlockData>(currentStructure.blocks);
         sortedBlocks.Sort((a, b) => a.position.y.CompareTo(b.position.y));
 
         // Group nearby blocks if optimization enabled
@@ -182,12 +182,12 @@ public class TurtleBuildingManager : MonoBehaviour
     /// <summary>
     /// Group nearby blocks to reduce travel time
     /// </summary>
-    private List<StructureData.StructureBlock> GroupNearbyBlocks(List<StructureData.StructureBlock> blocks)
+    private List<BlockData> GroupNearbyBlocks(List<BlockData> blocks)
     {
         if (blocks.Count <= 1) return blocks;
         
-        var result = new List<StructureData.StructureBlock>();
-        var remaining = new List<StructureData.StructureBlock>(blocks);
+        var result = new List<BlockData>();
+        var remaining = new List<BlockData>(blocks);
         
         // Start with first block
         result.Add(remaining[0]);
