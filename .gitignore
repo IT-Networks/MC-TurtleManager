@@ -54,3 +54,7 @@ Assets/Samples
 ProjectSettings
 Assets/StreamingAssets
 Assets/TutorialInfo
+Assets/Scripts/Structures/BlockPaletteUI.cs.meta
+*.meta
+Assets/Scripts/StructureManager.cs.meta
+MinecraftTurtleMaster.slnx
