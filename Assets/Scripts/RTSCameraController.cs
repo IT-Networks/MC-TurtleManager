@@ -435,6 +435,47 @@ public class RTSCameraController : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Jumps the camera to a specific world position
+    /// </summary>
+    public void JumpToPosition(Vector3 targetPosition)
+    {
+        // Maintain current camera height
+        Vector3 newPosition = new Vector3(targetPosition.x, transform.position.y, targetPosition.z);
+        transform.position = newPosition;
+
+        Debug.Log($"Camera jumped to position: {newPosition}");
+    }
+
+    /// <summary>
+    /// Smoothly moves camera to target position
+    /// </summary>
+    public void SmoothMoveToPosition(Vector3 targetPosition, float duration = 1f)
+    {
+        StartCoroutine(SmoothMoveCoroutine(targetPosition, duration));
+    }
+
+    private System.Collections.IEnumerator SmoothMoveCoroutine(Vector3 targetPosition, float duration)
+    {
+        Vector3 startPosition = transform.position;
+        Vector3 endPosition = new Vector3(targetPosition.x, transform.position.y, targetPosition.z);
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+
+            // Smooth interpolation
+            t = t * t * (3f - 2f * t);
+
+            transform.position = Vector3.Lerp(startPosition, endPosition, t);
+            yield return null;
+        }
+
+        transform.position = endPosition;
+    }
+
     void OnDestroy()
     {
         // Cleanup
