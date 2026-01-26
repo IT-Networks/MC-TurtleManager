@@ -139,6 +139,11 @@ public class ModernUIBuilder : MonoBehaviour
         GameObject scrollView = CreateScrollView(panel, "TurtleScrollView", new Vector2(0, 20), new Vector2(350, 280));
         listPanel.turtleListContent = scrollView.transform.Find("Viewport/Content");
 
+        // Add placeholder info text in scroll view
+        CreateTMPText(listPanel.turtleListContent.gameObject, "PlaceholderInfo",
+            "Waiting for turtles...\n\nTurtles will appear here when:\n• Connected to server\n• Turtles are registered\n• MultiTurtleManager is active",
+            new Vector2(0, -50), new Vector2(330, 200), 12, TextAlignmentOptions.Center);
+
         // Action Buttons
         GameObject actionsContainer = new GameObject("Actions");
         actionsContainer.transform.SetParent(panel.transform, false);
@@ -210,6 +215,11 @@ public class ModernUIBuilder : MonoBehaviour
         GameObject scrollView = CreateScrollView(panel, "TaskScrollView", new Vector2(0, 20), new Vector2(350, 280));
         queuePanel.taskListContent = scrollView.transform.Find("Viewport/Content");
 
+        // Add placeholder info text in scroll view
+        CreateTMPText(queuePanel.taskListContent.gameObject, "PlaceholderInfo",
+            "No tasks queued\n\nTasks will appear here when:\n• Mining operations start\n• Building operations start\n• Turtle commands queued\n\nUse Mining (M) or Building (B) modes to create tasks.",
+            new Vector2(0, -80), new Vector2(330, 250), 12, TextAlignmentOptions.Center);
+
         // Action Buttons
         GameObject actionsContainer = new GameObject("Actions");
         actionsContainer.transform.SetParent(panel.transform, false);
@@ -263,6 +273,11 @@ public class ModernUIBuilder : MonoBehaviour
         GameObject scrollView = CreateScrollView(panel, "StructureScrollView", new Vector2(-150, 50), new Vector2(250, 400));
         structPanel.structureListContent = scrollView.transform.Find("Viewport/Content");
 
+        // Add placeholder for structures
+        CreateTMPText(structPanel.structureListContent.gameObject, "StructurePlaceholder",
+            "No structures found\n\nStructures will appear here when:\n• Loaded from files\n• Created in Structure Editor\n\nUse 'Open Editor' to create new structures.",
+            new Vector2(0, -80), new Vector2(230, 300), 11, TextAlignmentOptions.Center);
+
         // Preview Area
         GameObject previewPanel = CreatePanel("PreviewPanel", new Vector2(135, 50), new Vector2(280, 400), panel.transform);
         previewPanel.GetComponent<Image>().color = new Color(0.05f, 0.05f, 0.05f, 0.9f);
@@ -306,29 +321,80 @@ public class ModernUIBuilder : MonoBehaviour
 
     private void BuildContextMenuPanel()
     {
-        GameObject panel = CreatePanel("ContextMenuPanel", new Vector2(0, 0), new Vector2(250, 300));
+        GameObject panel = CreatePanel("ContextMenuPanel", new Vector2(0, 0), new Vector2(280, 280));
 
         if (modernUIManager != null)
             modernUIManager.contextMenuPanel = panel;
 
-        // Add AnnoStyleContextMenu component (if it needs UI elements)
-        // For now, just create the panel structure
+        // Make panel circular background
+        Image panelImage = panel.GetComponent<Image>();
+        panelImage.color = new Color(0.1f, 0.1f, 0.1f, 0.95f);
 
-        CreateTMPText(panel, "MenuTitle", "Context Menu",
-            new Vector2(0, 125), new Vector2(220, 30), 14, TextAlignmentOptions.Center);
+        // Add AnnoStyleContextMenu component
+        AnnoStyleContextMenu contextMenu = panel.AddComponent<AnnoStyleContextMenu>();
 
-        CreateButton(panel, "Option1", "Move Here",
-            new Vector2(0, 80), new Vector2(220, 30), buttonColor);
-        CreateButton(panel, "Option2", "Mine Area",
-            new Vector2(0, 40), new Vector2(220, 30), buttonColor);
-        CreateButton(panel, "Option3", "Build Structure",
-            new Vector2(0, 0), new Vector2(220, 30), buttonColor);
-        CreateButton(panel, "Option4", "Inspect Block",
-            new Vector2(0, -40), new Vector2(220, 30), buttonColor);
-        CreateButton(panel, "CloseMenu", "Close",
-            new Vector2(0, -100), new Vector2(220, 30), new Color(0.6f, 0.2f, 0.2f));
+        // Create center area for context display
+        GameObject centerArea = new GameObject("CenterArea");
+        centerArea.transform.SetParent(panel.transform, false);
+        RectTransform centerRect = centerArea.AddComponent<RectTransform>();
+        centerRect.anchoredPosition = Vector2.zero;
+        centerRect.sizeDelta = new Vector2(100, 100);
+
+        Image centerImage = centerArea.AddComponent<Image>();
+        centerImage.color = new Color(0.15f, 0.15f, 0.15f, 0.8f);
+
+        CreateTMPText(centerArea, "ContextInfo", "Right-Click\nContext",
+            Vector2.zero, new Vector2(90, 90), 12, TextAlignmentOptions.Center);
+
+        // Create circular buttons
+        contextMenu.miningButton = CreateCircularButton(panel, "MiningButton", "Mine",
+            new Vector2(0, 90), new Vector2(70, 70), new Color(0.8f, 0.3f, 0.2f));
+
+        contextMenu.buildingButton = CreateCircularButton(panel, "BuildingButton", "Build",
+            new Vector2(90, 0), new Vector2(70, 70), new Color(0.2f, 0.8f, 0.3f));
+
+        contextMenu.moveButton = CreateCircularButton(panel, "MoveButton", "Move",
+            new Vector2(0, -90), new Vector2(70, 70), new Color(0.2f, 0.4f, 0.8f));
+
+        contextMenu.cancelButton = CreateCircularButton(panel, "CancelButton", "Cancel",
+            new Vector2(-90, 0), new Vector2(70, 70), new Color(0.6f, 0.2f, 0.2f));
+
+        // Assign panel reference
+        contextMenu.menuPanel = panel;
+
+        // Assign to ModernUIManager
+        if (modernUIManager != null)
+            modernUIManager.contextMenu = contextMenu;
 
         panel.SetActive(false);
+    }
+
+    private Button CreateCircularButton(GameObject parent, string name, string label, Vector2 position, Vector2 size, Color color)
+    {
+        GameObject buttonObj = new GameObject(name);
+        buttonObj.transform.SetParent(parent.transform, false);
+
+        RectTransform rect = buttonObj.AddComponent<RectTransform>();
+        rect.anchoredPosition = position;
+        rect.sizeDelta = size;
+
+        Image image = buttonObj.AddComponent<Image>();
+        image.color = color;
+        image.type = Image.Type.Simple;
+
+        Button button = buttonObj.AddComponent<Button>();
+
+        ColorBlock colors = button.colors;
+        colors.normalColor = color;
+        colors.highlightedColor = Color.Lerp(color, Color.white, 0.3f);
+        colors.pressedColor = Color.Lerp(color, Color.black, 0.3f);
+        colors.disabledColor = new Color(0.3f, 0.3f, 0.3f);
+        button.colors = colors;
+
+        // Add label text
+        CreateTMPText(buttonObj, "Label", label, Vector2.zero, size, 14, TextAlignmentOptions.Center, true);
+
+        return button;
     }
 
     #endregion
@@ -351,18 +417,44 @@ public class ModernUIBuilder : MonoBehaviour
         buttonsRect.anchoredPosition = new Vector2(0, -10);
         buttonsRect.sizeDelta = new Vector2(750, 40);
 
-        CreateButton(buttonsContainer, "MiningMode", "Mining (M)",
+        Button miningBtn = CreateButton(buttonsContainer, "MiningMode", "Mining (M)",
             new Vector2(-280, 0), new Vector2(100, 35), new Color(0.8f, 0.2f, 0.2f));
-        CreateButton(buttonsContainer, "BuildingMode", "Building (B)",
+        Button buildingBtn = CreateButton(buttonsContainer, "BuildingMode", "Building (B)",
             new Vector2(-165, 0), new Vector2(100, 35), new Color(0.2f, 0.6f, 0.2f));
-        CreateButton(buttonsContainer, "TurtleList", "Turtles (T)",
+        Button turtleListBtn = CreateButton(buttonsContainer, "TurtleList", "Turtles (T)",
             new Vector2(-50, 0), new Vector2(100, 35), new Color(0.2f, 0.4f, 0.6f));
-        CreateButton(buttonsContainer, "TaskQueue", "Tasks (Q)",
+        Button taskQueueBtn = CreateButton(buttonsContainer, "TaskQueue", "Tasks (Q)",
             new Vector2(65, 0), new Vector2(100, 35), new Color(0.6f, 0.4f, 0.2f));
-        CreateButton(buttonsContainer, "StructureEditor", "Editor (E)",
+        Button editorBtn = CreateButton(buttonsContainer, "StructureEditor", "Editor (E)",
             new Vector2(180, 0), new Vector2(100, 35), new Color(0.4f, 0.2f, 0.6f));
-        CreateButton(buttonsContainer, "Settings", "Settings",
+        Button settingsBtn = CreateButton(buttonsContainer, "Settings", "Settings",
             new Vector2(295, 0), new Vector2(100, 35), new Color(0.4f, 0.4f, 0.4f));
+
+        // Setup button callbacks
+        if (modernUIManager != null)
+        {
+            miningBtn.onClick.AddListener(() => {
+                if (modernUIManager.areaSelectionManager != null)
+                    modernUIManager.areaSelectionManager.ToggleMode(AreaSelectionManager.SelectionMode.Mining);
+            });
+
+            buildingBtn.onClick.AddListener(() => {
+                modernUIManager.ToggleStructureSelection();
+                if (modernUIManager.areaSelectionManager != null)
+                    modernUIManager.areaSelectionManager.ToggleMode(AreaSelectionManager.SelectionMode.Building);
+            });
+
+            turtleListBtn.onClick.AddListener(() => modernUIManager.ToggleTurtleList());
+            taskQueueBtn.onClick.AddListener(() => modernUIManager.ToggleTaskQueue());
+
+            editorBtn.onClick.AddListener(() => {
+                Debug.Log("Structure Editor button clicked - Editor not yet implemented");
+            });
+
+            settingsBtn.onClick.AddListener(() => {
+                Debug.Log("Settings button clicked - Settings not yet implemented");
+            });
+        }
 
         panel.SetActive(true);
     }
@@ -429,8 +521,8 @@ public class ModernUIBuilder : MonoBehaviour
         {
             rect.anchorMin = Vector2.zero;
             rect.anchorMax = Vector2.one;
-            rect.offsetMin = Vector2.zero;
-            rect.offsetMax = Vector2.zero;
+            rect.offsetMin = new Vector2(5, 5);
+            rect.offsetMax = new Vector2(-5, -5);
         }
         else
         {
@@ -440,10 +532,17 @@ public class ModernUIBuilder : MonoBehaviour
 
         TextMeshProUGUI tmp = textObj.AddComponent<TextMeshProUGUI>();
         tmp.text = text;
-        tmp.font = tmpFont;
+
+        // Try to get a TMP font, fallback to default
+        TMP_FontAsset font = GetTMPFont();
+        if (font != null)
+            tmp.font = font;
+
         tmp.fontSize = fontSize;
         tmp.color = textColor;
         tmp.alignment = alignment;
+        tmp.enableWordWrapping = true;
+        tmp.overflowMode = TextOverflowModes.Overflow;
 
         return tmp;
     }
@@ -599,8 +698,9 @@ public class ModernUIBuilder : MonoBehaviour
         layout.childControlWidth = true;
         layout.childForceExpandHeight = false;
         layout.childForceExpandWidth = true;
-        layout.spacing = 5;
-        layout.padding = new RectOffset(5, 5, 5, 5);
+        layout.spacing = 8;  // Increased spacing
+        layout.padding = new RectOffset(10, 10, 10, 10);  // More padding
+        layout.childAlignment = TextAnchor.UpperCenter;
 
         scrollRect.viewport = viewportRect;
         scrollRect.content = contentRect;
