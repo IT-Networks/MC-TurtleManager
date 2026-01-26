@@ -35,8 +35,8 @@ Shader "HDRP/Block"
         // Main Forward Pass
         Pass
         {
-            Name "ForwardOnly"
-            Tags { "LightMode" = "ForwardOnly" }
+            Name "Forward"
+            Tags { "LightMode" = "SRPDefaultUnlit" }
 
             Cull Back
             ZWrite On
@@ -137,8 +137,8 @@ Shader "HDRP/Block"
                                   colRight * rightMask +
                                   colLeft * leftMask;
 
-                // Use main directional light
-                float3 lightDir = _MainLightPosition.xyz;
+                // Simple directional lighting
+                float3 lightDir = normalize(float3(0.5, 1.0, 0.3));
                 float NdotL = saturate(dot(normalWS, lightDir));
                 float3 lighting = lerp(0.3, 1.0, NdotL); // Ambient + diffuse
 
