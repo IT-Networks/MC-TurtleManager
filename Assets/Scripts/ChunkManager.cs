@@ -294,16 +294,28 @@ public class ChunkManager
         ChunkMeshData meshData = null;
         CacheWriteData cacheWrite = null;
         PreparedChunkMesh prepared = null;
+        string errorMessage = null;
 
         Task asyncTask = Task.Run(() =>
         {
-            // Parse JSON
-            meshData = jsonParser.ParseChunkJson(json, out cacheWrite);
-
-            if (meshData != null)
+            try
             {
-                // Build mesh from parsed data (async)
-                prepared = meshBuilder.BuildMeshFromData(meshData, chunk);
+                // Parse JSON
+                meshData = jsonParser.ParseChunkJson(json, out cacheWrite);
+
+                if (meshData != null)
+                {
+                    // Build mesh from parsed data (async)
+                    prepared = meshBuilder.BuildMeshFromData(meshData, chunk);
+                }
+                else
+                {
+                    errorMessage = "JSON parsing returned null";
+                }
+            }
+            catch (System.Exception ex)
+            {
+                errorMessage = $"Exception during mesh building: {ex.Message}\n{ex.StackTrace}";
             }
         });
 
@@ -311,13 +323,13 @@ public class ChunkManager
 
         if (meshData == null)
         {
-            Debug.LogWarning($"Chunk {coord}: Failed to parse JSON data");
+            Debug.LogWarning($"Chunk {coord}: Failed to parse JSON data. {errorMessage}");
             yield break;
         }
 
         if (prepared == null)
         {
-            Debug.LogError($"Chunk {coord}: Failed to build mesh from data");
+            Debug.LogError($"Chunk {coord}: Failed to build mesh from data. {errorMessage}");
             yield break;
         }
 
