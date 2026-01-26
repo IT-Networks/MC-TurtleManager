@@ -590,16 +590,12 @@ public class ChunkManager
     public bool IsRegenerating => isRegenerating;
     public int VertexCount => _mf?.sharedMesh?.vertexCount ?? 0;
     public int SubmeshCount => _mf?.sharedMesh?.subMeshCount ?? 0;
+
+    // Thread-safe accessor for ChunkInfo
+    public ChunkInfo GetChunkInfo() => chunk;
 }
 
-// Extension methods bleiben gleich
-public static class ChunkManagerExtensions
-{
-    public static ChunkInfo GetChunkInfo(this ChunkManager chunkManager)
-    {
-        return chunkManager._go?.GetComponent<ChunkInfo>();
-    }
-}
+// Extension methods - removed GetChunkInfo as it's now an instance method
 
 // CoroutineHelper bleibt unverändert
 public class CoroutineHelper : MonoBehaviour
