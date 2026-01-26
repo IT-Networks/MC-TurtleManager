@@ -28,15 +28,15 @@ Shader "HDRP/Block"
             "Queue" = "Geometry"
         }
 
+        // Main Unlit Pass - Renders in both Editor and Game View
         Pass
         {
-            Name "ForwardOnly"
-            Tags { "LightMode" = "ForwardOnly" }
+            Name "Forward"
+            Tags { "LightMode" = "SRPDefaultUnlit" }
 
             Cull Back
             ZWrite On
             ZTest LEqual
-            Blend One Zero
 
             HLSLPROGRAM
             #pragma target 4.5
@@ -75,12 +75,14 @@ Shader "HDRP/Block"
             TEXTURE2D(_RightTex);
             SAMPLER(sampler_RightTex);
 
+            CBUFFER_START(UnityPerMaterial)
             float4 _TopColor;
             float4 _BottomColor;
             float4 _FrontColor;
             float4 _BackColor;
             float4 _LeftColor;
             float4 _RightColor;
+            CBUFFER_END
 
             v2f vert(appdata v)
             {
@@ -117,7 +119,7 @@ Shader "HDRP/Block"
                 float4 colRight = SAMPLE_TEXTURE2D(_RightTex, sampler_RightTex, i.uv) * _RightColor;
                 float4 colLeft = SAMPLE_TEXTURE2D(_LeftTex, sampler_LeftTex, i.uv) * _LeftColor;
 
-                // Blend
+                // Blend based on face
                 float4 color = colTop * topMask +
                               colBottom * bottomMask +
                               colFront * frontMask +
@@ -125,14 +127,104 @@ Shader "HDRP/Block"
                               colRight * rightMask +
                               colLeft * leftMask;
 
-                // Simple lighting
+                // Simple directional lighting
                 float3 lightDir = normalize(float3(0.5, 1.0, 0.3));
                 float ndl = saturate(dot(n, lightDir));
-                float3 lighting = lerp(0.3, 1.0, ndl);
+                float3 lighting = lerp(0.4, 1.0, ndl);
 
                 color.rgb *= lighting;
 
                 return color;
+            }
+            ENDHLSL
+        }
+
+        // SceneSelectionPass for Editor picking
+        Pass
+        {
+            Name "SceneSelectionPass"
+            Tags { "LightMode" = "SceneSelectionPass" }
+
+            Cull Back
+
+            HLSLPROGRAM
+            #pragma target 4.5
+            #pragma only_renderers d3d11 playstation xboxone xboxseries vulkan metal switch
+
+            #pragma vertex vert
+            #pragma fragment frag
+
+            #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
+            #include "Packages/com.unity.render-pipelines.high-definition/Runtime/ShaderLibrary/ShaderVariables.hlsl"
+
+            struct appdata
+            {
+                float4 vertex : POSITION;
+            };
+
+            struct v2f
+            {
+                float4 pos : SV_POSITION;
+            };
+
+            int _ObjectId;
+            int _PassValue;
+
+            v2f vert(appdata v)
+            {
+                v2f o;
+                float3 positionWS = TransformObjectToWorld(v.vertex.xyz);
+                o.pos = TransformWorldToHClip(positionWS);
+                return o;
+            }
+
+            float4 frag(v2f i) : SV_Target
+            {
+                return float4(_ObjectId, _PassValue, 1, 1);
+            }
+            ENDHLSL
+        }
+
+        // DepthOnly Pass
+        Pass
+        {
+            Name "DepthOnly"
+            Tags { "LightMode" = "DepthOnly" }
+
+            ZWrite On
+            ColorMask 0
+
+            HLSLPROGRAM
+            #pragma target 4.5
+            #pragma only_renderers d3d11 playstation xboxone xboxseries vulkan metal switch
+
+            #pragma vertex vert
+            #pragma fragment frag
+
+            #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
+            #include "Packages/com.unity.render-pipelines.high-definition/Runtime/ShaderLibrary/ShaderVariables.hlsl"
+
+            struct appdata
+            {
+                float4 vertex : POSITION;
+            };
+
+            struct v2f
+            {
+                float4 pos : SV_POSITION;
+            };
+
+            v2f vert(appdata v)
+            {
+                v2f o;
+                float3 positionWS = TransformObjectToWorld(v.vertex.xyz);
+                o.pos = TransformWorldToHClip(positionWS);
+                return o;
+            }
+
+            half4 frag(v2f i) : SV_Target
+            {
+                return 0;
             }
             ENDHLSL
         }

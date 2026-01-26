@@ -697,6 +697,18 @@ public class TurtleWorldManager : MonoBehaviour
                 // Eine einzige Textur für alle Seiten
                 mat.mainTexture = texData.top;
             }
+
+            // Special color tinting for grass blocks (green top)
+            if (lower.Contains("grass"))
+            {
+                mat.SetColor("_TopColor", new Color(0.4f, 0.8f, 0.3f, 1f)); // Grass green
+                // Keep other sides at default white (1,1,1,1)
+                mat.SetColor("_BottomColor", Color.white);
+                mat.SetColor("_FrontColor", Color.white);
+                mat.SetColor("_BackColor", Color.white);
+                mat.SetColor("_LeftColor", Color.white);
+                mat.SetColor("_RightColor", Color.white);
+            }
         }
 
         _materialCache[blockName] = mat;
