@@ -315,6 +315,12 @@ public class ChunkManager
             yield break;
         }
 
+        if (prepared == null)
+        {
+            Debug.LogError($"Chunk {coord}: Failed to build mesh from data");
+            yield break;
+        }
+
         currentMeshData = meshData;
 
         if (prepared.SubmeshCount == 0)
@@ -342,6 +348,12 @@ public class ChunkManager
 
     private IEnumerator ApplyPreparedMesh(PreparedChunkMesh prepared, int batchVerticesPerFrame)
     {
+        if (prepared == null)
+        {
+            Debug.LogError($"Chunk {coord}: PreparedChunkMesh is null");
+            yield break;
+        }
+
         var mesh = new Mesh
         {
             indexFormat = UnityEngine.Rendering.IndexFormat.UInt32,

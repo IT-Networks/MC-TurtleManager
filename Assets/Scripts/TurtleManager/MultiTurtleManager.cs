@@ -81,10 +81,25 @@ public class MultiTurtleManager : MonoBehaviour
     {
         try
         {
-            // Parse JSON (assuming format: {"entries": [{...}]})
-            TurtleStatusResponse response = JsonUtility.FromJson<TurtleStatusResponse>(jsonText);
+            List<TurtleStatusData> statusList = null;
 
-            if (response == null || response.entries == null)
+            // Try to parse as array first (newer API format)
+            if (jsonText.TrimStart().StartsWith("["))
+            {
+                // Direct array format
+                statusList = Newtonsoft.Json.JsonConvert.DeserializeObject<List<TurtleStatusData>>(jsonText);
+            }
+            else
+            {
+                // Object format with "entries" wrapper
+                TurtleStatusResponse response = JsonUtility.FromJson<TurtleStatusResponse>(jsonText);
+                if (response != null && response.entries != null)
+                {
+                    statusList = response.entries;
+                }
+            }
+
+            if (statusList == null || statusList.Count == 0)
             {
                 Debug.LogWarning("Invalid turtle status response");
                 return;
@@ -93,7 +108,7 @@ public class MultiTurtleManager : MonoBehaviour
             // Track which turtles are still active
             HashSet<int> activeTurtleIds = new HashSet<int>();
 
-            foreach (var statusData in response.entries)
+            foreach (var statusData in statusList)
             {
                 int turtleId = statusData.id;
                 activeTurtleIds.Add(turtleId);
