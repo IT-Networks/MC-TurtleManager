@@ -46,13 +46,8 @@ public class TurtlePrefabGenerator : MonoBehaviour
         visualizer.labelText = "Turtle";
         visualizer.enableIdleAnimation = true;
 
-        // Add RTSController if it exists (for movement)
-        // This is optional and will be checked at runtime
-        var rtsController = turtlePrefab.AddComponent<RTSController>();
-        if (rtsController != null)
-        {
-            Debug.Log("Added RTSController to turtle prefab");
-        }
+        // Movement is now handled by TurtleMainController system
+        // No need to add RTSController (old system removed)
 
         // Don't save this as an actual prefab, just use it at runtime
         // Mark it as DontDestroyOnLoad so it persists
