@@ -773,12 +773,9 @@ public class TurtleWorldManager : MonoBehaviour
                     }
                     else
                     {
-                        var rts = turtleInstance.GetComponent<RTSController>();
-                        if (rts == null || !rts.isMoving)
-                        {
-                            turtleInstance.transform.position = pos;
-                            turtleInstance.transform.rotation = Quaternion.LookRotation(DirectionToVector(status.direction));
-                        }
+                        // Update position and rotation when turtle exists
+                        turtleInstance.transform.position = pos;
+                        turtleInstance.transform.rotation = Quaternion.LookRotation(DirectionToVector(status.direction));
                     }
                 }
             }

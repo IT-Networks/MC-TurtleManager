@@ -125,6 +125,64 @@ public class ModernUIManager : MonoBehaviour
             if (buildModeManager == null)
                 buildModeManager = FindFirstObjectByType<BuildModeManager>();
         }
+
+        // Setup Quick Actions buttons if panel exists
+        SetupQuickActionsButtons();
+    }
+
+    public void SetupQuickActionsButtons()
+    {
+        if (quickActionsPanel == null) return;
+
+        // Find all buttons in QuickActionsPanel
+        UnityEngine.UI.Button[] buttons = quickActionsPanel.GetComponentsInChildren<UnityEngine.UI.Button>(true);
+
+        foreach (var btn in buttons)
+        {
+            // Clear existing listeners to avoid duplicates
+            btn.onClick.RemoveAllListeners();
+
+            // Setup based on button name
+            switch (btn.name)
+            {
+                case "MiningMode":
+                    btn.onClick.AddListener(() => {
+                        if (areaSelectionManager != null)
+                            areaSelectionManager.ToggleMode(AreaSelectionManager.SelectionMode.Mining);
+                    });
+                    break;
+
+                case "BuildingMode":
+                    btn.onClick.AddListener(() => {
+                        ToggleStructureSelection();
+                        if (areaSelectionManager != null)
+                            areaSelectionManager.ToggleMode(AreaSelectionManager.SelectionMode.Building);
+                    });
+                    break;
+
+                case "TurtleList":
+                    btn.onClick.AddListener(() => ToggleTurtleList());
+                    break;
+
+                case "TaskQueue":
+                    btn.onClick.AddListener(() => ToggleTaskQueue());
+                    break;
+
+                case "StructureEditor":
+                    btn.onClick.AddListener(() => {
+                        Debug.Log("Structure Editor - Not yet implemented");
+                    });
+                    break;
+
+                case "Settings":
+                    btn.onClick.AddListener(() => {
+                        Debug.Log("Settings - Not yet implemented");
+                    });
+                    break;
+            }
+        }
+
+        Debug.Log($"Setup {buttons.Length} Quick Actions buttons");
     }
 
     private void RegisterHotkeys()

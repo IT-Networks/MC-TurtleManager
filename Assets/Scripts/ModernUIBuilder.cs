@@ -417,44 +417,19 @@ public class ModernUIBuilder : MonoBehaviour
         buttonsRect.anchoredPosition = new Vector2(0, -10);
         buttonsRect.sizeDelta = new Vector2(750, 40);
 
-        Button miningBtn = CreateButton(buttonsContainer, "MiningMode", "Mining (M)",
+        // Create buttons - event handlers will be set up by ModernUIManager.SetupQuickActionsButtons()
+        CreateButton(buttonsContainer, "MiningMode", "Mining (M)",
             new Vector2(-280, 0), new Vector2(100, 35), new Color(0.8f, 0.2f, 0.2f));
-        Button buildingBtn = CreateButton(buttonsContainer, "BuildingMode", "Building (B)",
+        CreateButton(buttonsContainer, "BuildingMode", "Building (B)",
             new Vector2(-165, 0), new Vector2(100, 35), new Color(0.2f, 0.6f, 0.2f));
-        Button turtleListBtn = CreateButton(buttonsContainer, "TurtleList", "Turtles (T)",
+        CreateButton(buttonsContainer, "TurtleList", "Turtles (T)",
             new Vector2(-50, 0), new Vector2(100, 35), new Color(0.2f, 0.4f, 0.6f));
-        Button taskQueueBtn = CreateButton(buttonsContainer, "TaskQueue", "Tasks (Q)",
+        CreateButton(buttonsContainer, "TaskQueue", "Tasks (Q)",
             new Vector2(65, 0), new Vector2(100, 35), new Color(0.6f, 0.4f, 0.2f));
-        Button editorBtn = CreateButton(buttonsContainer, "StructureEditor", "Editor (E)",
+        CreateButton(buttonsContainer, "StructureEditor", "Editor (E)",
             new Vector2(180, 0), new Vector2(100, 35), new Color(0.4f, 0.2f, 0.6f));
-        Button settingsBtn = CreateButton(buttonsContainer, "Settings", "Settings",
+        CreateButton(buttonsContainer, "Settings", "Settings",
             new Vector2(295, 0), new Vector2(100, 35), new Color(0.4f, 0.4f, 0.4f));
-
-        // Setup button callbacks
-        if (modernUIManager != null)
-        {
-            miningBtn.onClick.AddListener(() => {
-                if (modernUIManager.areaSelectionManager != null)
-                    modernUIManager.areaSelectionManager.ToggleMode(AreaSelectionManager.SelectionMode.Mining);
-            });
-
-            buildingBtn.onClick.AddListener(() => {
-                modernUIManager.ToggleStructureSelection();
-                if (modernUIManager.areaSelectionManager != null)
-                    modernUIManager.areaSelectionManager.ToggleMode(AreaSelectionManager.SelectionMode.Building);
-            });
-
-            turtleListBtn.onClick.AddListener(() => modernUIManager.ToggleTurtleList());
-            taskQueueBtn.onClick.AddListener(() => modernUIManager.ToggleTaskQueue());
-
-            editorBtn.onClick.AddListener(() => {
-                Debug.Log("Structure Editor button clicked - Editor not yet implemented");
-            });
-
-            settingsBtn.onClick.AddListener(() => {
-                Debug.Log("Settings button clicked - Settings not yet implemented");
-            });
-        }
 
         panel.SetActive(true);
     }
