@@ -95,9 +95,9 @@ end
 
 -- Aktuell ausgerüstetes Tool (wenn periph.)
 function getEquippedTool()
-    local toolLeft = peripheral.getType("left") 
-    local toolRight = peripheral.getType("right")
-    return tool or "none"
+    local toolLeft = peripheral.getType("left") or "none"
+    local toolRight = peripheral.getType("right") or "none"
+    return {left = toolLeft, right = toolRight}
 end
 
 
@@ -158,6 +158,21 @@ function getNextCommand(label)
     return nil
 end
 
+-- Refuel function (must be defined before main loop)
+function executeRefuel(cmdData)
+    print("Starte Refuel-Vorgang...")
+    isBusy = true
+    local chest = peripheral.find("minecraft:chest")
+
+    for slot, item in pairs(chest.list()) do
+        if item and validFuelItems[item.name] then
+            chest.pushItems(os.getComputerLabel(), slot, 10)
+        end
+    end
+    turtle.refuel(64)
+    isBusy = false
+end
+
 -- Start
 print("Initialisiere GPS...")
 getDirection()
@@ -209,29 +224,16 @@ while true do
         else print("Unbekannter Befehl:", cmd)
         end
 
-        if result then            
+        if result then
             print("Befehl ausgeführt:", cmd)
+            -- Update position only after successful movement commands
+            if cmd == "forward" or cmd == "back" or cmd == "up" or cmd == "down" then
+                getPosition()
+            end
         else
             print("Fehler bei Befehl:", cmd)
         end
     end
-    getPosition()
     reportStatus()
     sleep(SLEEP_TIME)
 end
-
-function executeRefuel(cmdData)
-    print("Starte Refuel-Vorgang...")
-    isBusy = true
-    local chest = peripheral.find("minecraft:chest")
-
-
-    for slot, item in pairs(chest.list()) do       
-        if item and validFuelItems[item.name] then
-            chest.pushItems(os.getComputerLabel(), slot, 10)
-        end           
-    end
-    turtle.refuel(64)
-    isBusy = false
-end
-
