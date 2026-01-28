@@ -25,6 +25,7 @@ public class IntegrationManager : MonoBehaviour
     public StructureManager structureManager;
     public ServerUpdateManager serverUpdateManager;
     public ModernUIManager modernUIManager;
+    public MultiTurtleManager multiTurtleManager;
     
     [Header("Auto-Setup")]
     public bool autoSetupComponents = true;
@@ -246,6 +247,12 @@ public class IntegrationManager : MonoBehaviour
     
     private void SetupIntegrations()
     {
+        // Find MultiTurtleManager if not assigned
+        if (multiTurtleManager == null)
+        {
+            multiTurtleManager = FindFirstObjectByType<MultiTurtleManager>();
+        }
+
         // Connect area selection to new turtle main controller
         if (areaSelectionManager != null && turtleMainController != null)
         {
@@ -258,18 +265,32 @@ public class IntegrationManager : MonoBehaviour
             modernUIManager.areaSelectionManager = areaSelectionManager;
             modernUIManager.structureManager = structureManager;
             modernUIManager.cameraController = cameraController;
+            modernUIManager.turtleManager = multiTurtleManager;
 
-            // Initialize UI panels with references
-            if (modernUIManager.turtleList != null)
+            // Find TurtleSelectionManager
+            TurtleSelectionManager selectionMgr = FindFirstObjectByType<TurtleSelectionManager>();
+            if (selectionMgr != null)
             {
-                // TurtleList will need MultiTurtleManager reference
-                // This can be set up when MultiTurtleManager is available
+                modernUIManager.selectionManager = selectionMgr;
             }
 
-            if (modernUIManager.taskQueue != null)
+            // Re-initialize UI panels with complete references
+            if (modernUIManager.turtleList != null && multiTurtleManager != null)
             {
-                // TaskQueue will need MultiTurtleManager reference
-                // This can be set up when MultiTurtleManager is available
+                modernUIManager.turtleList.Initialize(multiTurtleManager, selectionMgr, cameraController);
+                Debug.Log("TurtleList initialized with MultiTurtleManager");
+            }
+
+            if (modernUIManager.taskQueue != null && multiTurtleManager != null)
+            {
+                modernUIManager.taskQueue.Initialize(multiTurtleManager, selectionMgr);
+                Debug.Log("TaskQueue initialized with MultiTurtleManager");
+            }
+
+            if (modernUIManager.contextMenu != null)
+            {
+                modernUIManager.contextMenu.Initialize(modernUIManager);
+                Debug.Log("ContextMenu initialized");
             }
         }
 
