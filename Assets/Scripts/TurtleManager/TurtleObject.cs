@@ -181,6 +181,18 @@ public class TurtleObject : MonoBehaviour
         UpdateVisuals();
     }
 
+    /// <summary>
+    /// Show path visualization regardless of selection (for auto-show during movement)
+    /// </summary>
+    public void ShowPathAutomatically()
+    {
+        EnsurePathLineRenderer();
+        if (pathLineRenderer != null)
+        {
+            pathLineRenderer.enabled = true;
+        }
+    }
+
     public void SetBusy(bool busy, TurtleOperationManager.OperationType operation = TurtleOperationManager.OperationType.None)
     {
         isBusy = busy;
@@ -251,6 +263,30 @@ public class TurtleObject : MonoBehaviour
         };
     }
 
+    /// <summary>
+    /// Ensures LineRenderer is created (called automatically when path starts)
+    /// </summary>
+    public void EnsurePathLineRenderer()
+    {
+        if (pathLineRenderer == null)
+        {
+            GameObject lineObj = new GameObject("PathVisualization");
+            lineObj.transform.SetParent(transform);
+            lineObj.transform.localPosition = Vector3.zero;
+
+            pathLineRenderer = lineObj.AddComponent<LineRenderer>();
+            pathLineRenderer.startWidth = 0.15f;
+            pathLineRenderer.endWidth = 0.15f;
+            pathLineRenderer.material = CreateHDRPLineMaterial();
+            pathLineRenderer.startColor = pathColor;
+            pathLineRenderer.endColor = pathColor;
+            pathLineRenderer.numCapVertices = 5;
+            pathLineRenderer.numCornerVertices = 5;
+
+            Debug.Log($"Created PathLineRenderer for {turtleName}");
+        }
+    }
+
     private void ShowPathVisualization()
     {
         // Get current path from movement manager
@@ -268,21 +304,7 @@ public class TurtleObject : MonoBehaviour
         }
 
         // Create or get line renderer
-        if (pathLineRenderer == null)
-        {
-            GameObject lineObj = new GameObject("PathVisualization");
-            lineObj.transform.SetParent(transform);
-            lineObj.transform.localPosition = Vector3.zero;
-
-            pathLineRenderer = lineObj.AddComponent<LineRenderer>();
-            pathLineRenderer.startWidth = 0.15f;
-            pathLineRenderer.endWidth = 0.15f;
-            pathLineRenderer.material = CreateHDRPLineMaterial();
-            pathLineRenderer.startColor = pathColor;
-            pathLineRenderer.endColor = pathColor;
-            pathLineRenderer.numCapVertices = 5;
-            pathLineRenderer.numCornerVertices = 5;
-        }
+        EnsurePathLineRenderer();
 
         // Set path positions
         pathLineRenderer.positionCount = path.Count + 1;

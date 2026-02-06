@@ -151,7 +151,8 @@ public class TurtleWorldManager : MonoBehaviour
         }
 
         StartCoroutine(ChunkStreamingLoop());
-        StartCoroutine(SpawnOrUpdateTurtle());
+        // NOTE: Turtle spawning now handled by MultiTurtleManager - old system disabled
+        // StartCoroutine(SpawnOrUpdateTurtle());
 
         if (autoSyncToServer)
         {
@@ -166,7 +167,8 @@ public class TurtleWorldManager : MonoBehaviour
         _loadedChunks.Clear();
         regeneratingChunks.Clear();
         pendingServerUpdates.Clear();
-        if (turtleInstance != null) Destroy(turtleInstance);
+        // NOTE: Turtle cleanup now handled by MultiTurtleManager
+        // if (turtleInstance != null) Destroy(turtleInstance);
     }
 
     IEnumerator ChunkStreamingLoop()

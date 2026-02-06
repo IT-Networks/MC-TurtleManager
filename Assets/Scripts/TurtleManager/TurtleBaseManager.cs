@@ -211,10 +211,12 @@ public class TurtleBaseManager : MonoBehaviour
     public Vector3 GetTurtlePosition()
     {
         if (currentTurtleBaseStatus == null) return Vector3.zero;
-        
+
+        // Return Unity coordinates (X negated, Y with offset)
+        // This matches the visual position from TurtleObject.UpdateStatus()
         return new Vector3(
-            currentTurtleBaseStatus.position.x + 1,
-            currentTurtleBaseStatus.position.y,
+            -(currentTurtleBaseStatus.position.x + 1),  // Negate X for Unity
+            currentTurtleBaseStatus.position.y + MultiTurtleManager.WorldYOffset,  // Apply Y offset
             currentTurtleBaseStatus.position.z
         );
     }
