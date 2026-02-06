@@ -91,8 +91,9 @@ public class TurtleObject : MonoBehaviour
     {
         currentStatus = status;
 
-        // Update position
-        Vector3 newPos = new Vector3(-status.position.x, status.position.y, status.position.z);
+        // Update position with world Y offset
+        // MultiTurtleManager.WorldYOffset converts Minecraft Y to Unity Y (Minecraft Y=-64 becomes Unity Y=0)
+        Vector3 newPos = new Vector3(-status.position.x, status.position.y + MultiTurtleManager.WorldYOffset, status.position.z);
         transform.position = newPos;
 
         // Update rotation based on direction

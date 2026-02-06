@@ -20,6 +20,13 @@ public class MultiTurtleManager : MonoBehaviour
     public bool autoCreateVisuals = true;
     public float spawnHeight = 0.5f;
 
+    [Header("Coordinate System")]
+    [Tooltip("Y-offset to move turtles out of negative coordinates (Minecraft Y=-64 becomes Unity Y=0)")]
+    public float worldYOffset = 64f; // Minecraft Y=-64 to Y=0 offset
+
+    // Static accessor for world Y offset
+    public static float WorldYOffset { get; private set; } = 64f;
+
     private Dictionary<int, TurtleObject> turtles = new Dictionary<int, TurtleObject>();
     private bool isUpdating = false;
 
@@ -29,6 +36,9 @@ public class MultiTurtleManager : MonoBehaviour
 
     private void Start()
     {
+        // Set static world Y offset for all turtles to use
+        WorldYOffset = worldYOffset;
+
         if (turtlePrefab == null)
         {
             CreateDefaultTurtlePrefab();
@@ -120,7 +130,7 @@ public class MultiTurtleManager : MonoBehaviour
                     label = statusData.label,
                     position = new Vector3Int(statusData.position.x, statusData.position.y, statusData.position.z),
                     direction = statusData.direction,
-                    fuel = statusData.fuel,
+                    fuel = statusData.GetFuelLevel(), // Use helper method to get correct fuel value
                     status = statusData.status
                 };
 
@@ -158,7 +168,9 @@ public class MultiTurtleManager : MonoBehaviour
             return;
         }
 
-        Vector3 spawnPos = new Vector3(-status.position.x, status.position.y + spawnHeight, status.position.z);
+        // Apply world Y offset to move coordinates out of negative range
+        // Minecraft Y=-64 (bedrock) becomes Unity Y=0
+        Vector3 spawnPos = new Vector3(-status.position.x, status.position.y + worldYOffset + spawnHeight, status.position.z);
         GameObject turtleObj = Instantiate(turtlePrefab, spawnPos, Quaternion.identity);
         turtleObj.name = $"Turtle_{turtleId}_{status.label}";
         turtleObj.SetActive(true);
@@ -190,9 +202,16 @@ public class MultiTurtleManager : MonoBehaviour
 
         // Add other managers as needed
         turtleObj.AddComponent<TurtleMovementManager>();
-        turtleObj.AddComponent<TurtleMiningManager>();
+
+        // Add mining manager and optimizer
+        var miningManager = turtleObj.AddComponent<TurtleMiningManager>();
+        var optimizer = turtleObj.AddComponent<ColumnBasedMiningOptimizer>();
+        miningManager.columnOptimizer = optimizer; // Link them
+
         turtleObj.AddComponent<TurtleBuildingManager>();
         turtleObj.AddComponent<TurtleOperationManager>();
+
+        Debug.Log($"Turtle {turtleId}: Added managers including ColumnBasedMiningOptimizer");
     }
 
     private void UpdateTurtle(int turtleId, TurtleStatus status)
@@ -266,8 +285,16 @@ public class TurtleStatusData
     public string label;
     public PositionData position;
     public string direction;
-    public int fuel;
+    public int fuel; // Legacy field
+    public int fuelLevel; // New field from server
+    public int maxFuel; // Max fuel capacity
     public string status;
+
+    // Get fuel level (prefers fuelLevel if set, falls back to fuel)
+    public int GetFuelLevel()
+    {
+        return fuelLevel > 0 ? fuelLevel : fuel;
+    }
 }
 
 [System.Serializable]

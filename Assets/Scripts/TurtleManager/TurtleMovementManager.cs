@@ -32,7 +32,22 @@ public class TurtleMovementManager : MonoBehaviour
     private void Start()
     {
         baseManager = FindFirstObjectByType<TurtleBaseManager>();
-        
+
+        // Auto-find pathfinder if not assigned
+        if (pathfinder == null)
+        {
+            pathfinder = FindFirstObjectByType<BlockWorldPathfinder>();
+            if (pathfinder != null)
+            {
+                Debug.Log("TurtleMovementManager: Auto-found BlockWorldPathfinder");
+            }
+            else
+            {
+                Debug.LogWarning("TurtleMovementManager: No BlockWorldPathfinder found. Pathfinding disabled.");
+                usePathfinding = false;
+            }
+        }
+
         if (defaultPathfindingOptions == null)
         {
             defaultPathfindingOptions = new PathfindingOptions

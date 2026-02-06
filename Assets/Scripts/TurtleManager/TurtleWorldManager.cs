@@ -773,7 +773,8 @@ public class TurtleWorldManager : MonoBehaviour
                         Debug.LogWarning($"Turtle '{status.label}' Y position clamped from {status.position.y} to {clampedY} (valid range: -64 to 320)");
                     }
 
-                    Vector3 pos = new(-status.position.x, clampedY, status.position.z);
+                    // Apply world Y offset (Minecraft Y=-64 becomes Unity Y=0)
+                    Vector3 pos = new(-status.position.x, clampedY + 64f, status.position.z);
 
                     if (turtleInstance == null)
                     {
