@@ -146,6 +146,13 @@ public class TurtleMovementManager : MonoBehaviour
         // Reset direction cache at start of new path to sync with server status
         cachedDirection = null;
 
+        // Auto-show path visualization when movement starts
+        TurtleObject turtleObj = GetComponent<TurtleObject>();
+        if (turtleObj != null)
+        {
+            turtleObj.ShowPathAutomatically();
+        }
+
         Debug.Log($"[Path] Starting path with {path.Count} waypoints");
 
         while (currentPathIndex < path.Count && isFollowingPath)
