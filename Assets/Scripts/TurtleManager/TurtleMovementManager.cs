@@ -103,7 +103,7 @@ public class TurtleMovementManager : MonoBehaviour
                 }
                 else
                 {
-                    Debug.LogWarning($"[Pathfinding] FAILED - No valid path found. Reason: {pathResult.errorMessage ?? "Unknown"}");
+                    Debug.LogWarning($"[Pathfinding] FAILED - No valid path found. Success: {pathResult.success}, Waypoints: {pathResult.optimizedPath?.Count ?? 0}");
                     Debug.LogWarning("Turtle cannot reach destination - skipping movement");
                     operationManager?.IncrementFailed();
                     yield break; // Don't try direct movement through blocks
