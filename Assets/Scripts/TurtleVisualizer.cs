@@ -57,12 +57,15 @@ public class TurtleVisualizer : MonoBehaviour
         bodyObject.transform.localPosition = Vector3.zero;
         bodyObject.transform.localScale = Vector3.one * turtleSize;
 
-        // Setup body material
+        // Setup body material (HDRP compatible)
         Renderer bodyRenderer = bodyObject.GetComponent<Renderer>();
-        Material bodyMat = new Material(Shader.Find("Standard"));
+        Material bodyMat = CreateHDRPMaterial();
         bodyMat.color = bodyColor;
-        bodyMat.SetFloat("_Metallic", 0.3f);
-        bodyMat.SetFloat("_Glossiness", 0.6f);
+        // HDRP uses _Smoothness instead of _Glossiness
+        if (bodyMat.HasProperty("_Metallic"))
+            bodyMat.SetFloat("_Metallic", 0.3f);
+        if (bodyMat.HasProperty("_Smoothness"))
+            bodyMat.SetFloat("_Smoothness", 0.6f);
         bodyRenderer.material = bodyMat;
 
         // Create front direction indicator
@@ -72,14 +75,25 @@ public class TurtleVisualizer : MonoBehaviour
         frontIndicator.transform.localPosition = new Vector3(0, 0, 0.51f); // Slightly in front
         frontIndicator.transform.localScale = new Vector3(0.6f, 0.6f, 0.05f);
 
-        // Setup front indicator material
+        // Setup front indicator material (HDRP compatible)
         Renderer frontRenderer = frontIndicator.GetComponent<Renderer>();
-        Material frontMat = new Material(Shader.Find("Standard"));
+        Material frontMat = CreateHDRPMaterial();
         frontMat.color = frontColor;
-        frontMat.SetFloat("_Metallic", 0.5f);
-        frontMat.SetFloat("_Glossiness", 0.8f);
-        frontMat.EnableKeyword("_EMISSION");
-        frontMat.SetColor("_EmissionColor", frontColor * 0.3f);
+        if (frontMat.HasProperty("_Metallic"))
+            frontMat.SetFloat("_Metallic", 0.5f);
+        if (frontMat.HasProperty("_Smoothness"))
+            frontMat.SetFloat("_Smoothness", 0.8f);
+        // Enable emission for HDRP
+        if (frontMat.HasProperty("_EmissiveColor"))
+        {
+            frontMat.EnableKeyword("_EMISSION");
+            frontMat.SetColor("_EmissiveColor", frontColor * 0.3f);
+        }
+        else if (frontMat.HasProperty("_EmissionColor"))
+        {
+            frontMat.EnableKeyword("_EMISSION");
+            frontMat.SetColor("_EmissionColor", frontColor * 0.3f);
+        }
         frontRenderer.material = frontMat;
 
         // Remove colliders (we don't need physics for visualization)
@@ -119,11 +133,75 @@ public class TurtleVisualizer : MonoBehaviour
         labelBg.transform.localScale = new Vector3(labelText.Length * 0.12f, 0.3f, 1f);
 
         Renderer bgRenderer = labelBg.GetComponent<Renderer>();
-        Material bgMat = new Material(Shader.Find("Standard"));
+        Material bgMat = CreateHDRPUnlitMaterial();
         bgMat.color = new Color(0, 0, 0, 0.7f);
         bgRenderer.material = bgMat;
 
         DestroyImmediate(labelBg.GetComponent<Collider>());
+    }
+
+    /// <summary>
+    /// Creates an HDRP-compatible material (Lit shader)
+    /// </summary>
+    Material CreateHDRPMaterial()
+    {
+        // Try HDRP/Lit first
+        Shader shader = Shader.Find("HDRP/Lit");
+        if (shader == null)
+        {
+            // Fallback to Standard (for non-HDRP projects)
+            shader = Shader.Find("Standard");
+        }
+        if (shader == null)
+        {
+            // Last resort fallback
+            shader = Shader.Find("Unlit/Color");
+        }
+
+        return new Material(shader);
+    }
+
+    /// <summary>
+    /// Creates an HDRP-compatible unlit material (for UI elements)
+    /// </summary>
+    Material CreateHDRPUnlitMaterial()
+    {
+        // Try HDRP/Unlit first (better for transparent overlays)
+        Shader shader = Shader.Find("HDRP/Unlit");
+        if (shader == null)
+        {
+            // Fallback to Standard
+            shader = Shader.Find("Standard");
+        }
+        if (shader == null)
+        {
+            // Last resort
+            shader = Shader.Find("Unlit/Color");
+        }
+
+        Material mat = new Material(shader);
+
+        // Enable transparency for HDRP
+        if (mat.HasProperty("_SurfaceType"))
+        {
+            mat.SetFloat("_SurfaceType", 1); // Transparent
+            mat.SetFloat("_BlendMode", 0); // Alpha blend
+            mat.SetFloat("_AlphaCutoffEnable", 0);
+        }
+        else
+        {
+            // Standard pipeline transparency setup
+            mat.SetFloat("_Mode", 3); // Transparent mode
+            mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            mat.SetInt("_ZWrite", 0);
+            mat.DisableKeyword("_ALPHATEST_ON");
+            mat.EnableKeyword("_ALPHABLEND_ON");
+            mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            mat.renderQueue = 3000;
+        }
+
+        return mat;
     }
 
     void Update()

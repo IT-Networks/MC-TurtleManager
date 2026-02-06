@@ -49,10 +49,14 @@ public class MultiTurtleManager : MonoBehaviour
 
     private void CreateDefaultTurtlePrefab()
     {
-        turtlePrefab = new GameObject("TurtlePrefab");
+        // Create prefab as child of this manager (hidden template)
+        turtlePrefab = new GameObject("TurtlePrefab_Template");
+        turtlePrefab.transform.SetParent(transform);
         turtlePrefab.AddComponent<TurtleObject>();
         turtlePrefab.AddComponent<TurtleVisualizer>();
         turtlePrefab.SetActive(false);
+
+        Debug.Log("Created default turtle prefab template (hidden)");
     }
 
     private IEnumerator UpdateTurtlesLoop()

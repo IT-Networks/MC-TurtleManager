@@ -684,9 +684,47 @@ public class TurtleMovementManager : MonoBehaviour
     #region Public Properties
 
     public bool IsFollowingPath => isFollowingPath;
-    public Vector3 CurrentTarget => currentPathResult?.optimizedPath?.Count > currentPathIndex 
-        ? currentPathResult.optimizedPath[currentPathIndex] 
+    public Vector3 CurrentTarget => currentPathResult?.optimizedPath?.Count > currentPathIndex
+        ? currentPathResult.optimizedPath[currentPathIndex]
         : Vector3.zero;
+
+    /// <summary>
+    /// Check if turtle has an active path
+    /// </summary>
+    public bool HasActivePath()
+    {
+        return currentPathResult != null &&
+               currentPathResult.optimizedPath != null &&
+               currentPathResult.optimizedPath.Count > 0;
+    }
+
+    /// <summary>
+    /// Get the current path (remaining waypoints)
+    /// </summary>
+    public List<Vector3> GetCurrentPath()
+    {
+        if (!HasActivePath())
+            return new List<Vector3>();
+
+        // Return remaining path from current index onwards
+        List<Vector3> remainingPath = new List<Vector3>();
+        for (int i = currentPathIndex; i < currentPathResult.optimizedPath.Count; i++)
+        {
+            remainingPath.Add(currentPathResult.optimizedPath[i]);
+        }
+        return remainingPath;
+    }
+
+    /// <summary>
+    /// Get the full path including completed waypoints
+    /// </summary>
+    public List<Vector3> GetFullPath()
+    {
+        if (!HasActivePath())
+            return new List<Vector3>();
+
+        return new List<Vector3>(currentPathResult.optimizedPath);
+    }
 
     #endregion
 
