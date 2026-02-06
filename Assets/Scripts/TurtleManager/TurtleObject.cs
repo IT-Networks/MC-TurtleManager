@@ -80,6 +80,41 @@ public class TurtleObject : MonoBehaviour
                 isMoving = false;
             }
         }
+
+        // Update path visualization if selected and has path
+        if (isSelected && pathLineRenderer != null && pathLineRenderer.enabled)
+        {
+            UpdatePathVisualization();
+        }
+    }
+
+    private void UpdatePathVisualization()
+    {
+        TurtleMovementManager movementManager = GetComponent<TurtleMovementManager>();
+        if (movementManager == null || !movementManager.HasActivePath())
+        {
+            // No path anymore, hide line
+            if (pathLineRenderer != null)
+                pathLineRenderer.enabled = false;
+            return;
+        }
+
+        List<Vector3> path = movementManager.GetCurrentPath();
+        if (path == null || path.Count == 0)
+        {
+            if (pathLineRenderer != null)
+                pathLineRenderer.enabled = false;
+            return;
+        }
+
+        // Update path positions
+        pathLineRenderer.positionCount = path.Count + 1;
+        pathLineRenderer.SetPosition(0, transform.position + Vector3.up * 0.5f);
+
+        for (int i = 0; i < path.Count; i++)
+        {
+            pathLineRenderer.SetPosition(i + 1, path[i] + Vector3.up * 0.5f);
+        }
     }
 
     private void CreateSelectionIndicator()
