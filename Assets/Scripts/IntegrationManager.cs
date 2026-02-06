@@ -23,7 +23,6 @@ public class IntegrationManager : MonoBehaviour
     [Header("Construction System")]
     public AreaSelectionManager areaSelectionManager;
     public StructureManager structureManager;
-    public ServerUpdateManager serverUpdateManager;
     public ModernUIManager modernUIManager;
     public MultiTurtleManager multiTurtleManager;
 
@@ -31,10 +30,6 @@ public class IntegrationManager : MonoBehaviour
     public bool autoSetupComponents = true;
     public bool createUICanvas = true;
     public bool setupModularTurtleSystem = true;
-
-    [Header("Optional Systems")]
-    [Tooltip("Enable ServerUpdateManager (requires server on port 4567 - disabled if not needed)")]
-    public bool enableServerUpdateManager = false; // Disabled by default - requires separate update server
     
     private void Awake()
     {
@@ -179,7 +174,6 @@ public class IntegrationManager : MonoBehaviour
     {
         SetupAreaSelectionManager();
         SetupStructureManager();
-        SetupServerUpdateManager();
     }
     
     private void SetupAreaSelectionManager()
@@ -205,27 +199,6 @@ public class IntegrationManager : MonoBehaviour
             structureObj.transform.SetParent(transform);
             structureManager = structureObj.AddComponent<StructureManager>();
         }
-    }
-    
-    private void SetupServerUpdateManager()
-    {
-        // ServerUpdateManager is optional - requires separate update server on port 4567
-        if (!enableServerUpdateManager)
-        {
-            Debug.Log("ServerUpdateManager disabled (requires separate update server on port 4567)");
-            return;
-        }
-
-        if (serverUpdateManager == null)
-        {
-            GameObject updateObj = new GameObject("ServerUpdateManager");
-            updateObj.transform.SetParent(transform);
-            serverUpdateManager = updateObj.AddComponent<ServerUpdateManager>();
-        }
-
-        // Setup references
-        serverUpdateManager.worldManager = worldManager;
-        Debug.Log("ServerUpdateManager enabled - monitoring updates from port 4567");
     }
     
     private void SetupModernUI()
@@ -401,11 +374,6 @@ public class IntegrationManager : MonoBehaviour
         if (turtleMainController != null)
         {
             turtleMainController.CancelCurrentOperation();
-        }
-        
-        if (serverUpdateManager != null)
-        {
-            serverUpdateManager.ClearAllGizmos();
         }
     }
     
