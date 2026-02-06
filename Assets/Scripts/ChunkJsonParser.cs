@@ -115,28 +115,30 @@ public class ChunkJsonParser
 
                 int wy = y + Math.Abs(minBuildHeight);
 
-                if (x >= 0 && x < chunkSize && 
-                    wy >= 0 && wy < 400 && 
+                if (x >= 0 && x < chunkSize &&
+                    wy >= 0 && wy < 400 &&
                     z >= 0 && z < chunkSize)
                 {
                     blockGrid[x, wy, z] = blockName;
 
-                    // Store for cache (check byte range)
+                    // Store for cache (check valid ranges)
+                    // X and Z must fit in byte (0-15 within chunk)
+                    // Y must fit in short (-32768 to 32767, covers -64 to 320 Minecraft range)
                     if (x >= 0 && x <= 255 &&
-                        wy >= 0 && wy <= 255 &&
+                        wy >= short.MinValue && wy <= short.MaxValue &&
                         z >= 0 && z <= 255)
                     {
                         cacheWrite.blocks.Add(new BlockRecord
                         {
                             id = id,
                             x = (byte)x,
-                            y = (byte)wy,
+                            y = (short)wy,  // Changed from byte to short for Minecraft 1.18+ support
                             z = (byte)z
                         });
                     }
                     else
                     {
-                        Debug.LogWarning($"Block coordinates out of byte range: x={x}, wy={wy}, z={z}");
+                        Debug.LogWarning($"Block coordinates out of range: x={x}, wy={wy}, z={z} (X/Z must be 0-255, Y must be {short.MinValue}-{short.MaxValue})");
                     }
                 }
             }

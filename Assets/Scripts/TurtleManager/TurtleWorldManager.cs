@@ -764,7 +764,17 @@ public class TurtleWorldManager : MonoBehaviour
 
                 foreach (var status in statusList)
                 {
-                    Vector3 pos = new(-status.position.x, status.position.y, status.position.z);
+                    // Clamp Y coordinate to valid Minecraft range (-64 to 320)
+                    // Prevents turtle from spawning below bedrock or above build limit
+                    float clampedY = Mathf.Clamp(status.position.y, -64f, 320f);
+
+                    if (clampedY != status.position.y)
+                    {
+                        Debug.LogWarning($"Turtle '{status.label}' Y position clamped from {status.position.y} to {clampedY} (valid range: -64 to 320)");
+                    }
+
+                    Vector3 pos = new(-status.position.x, clampedY, status.position.z);
+
                     if (turtleInstance == null)
                     {
                         turtleInstance = Instantiate(turtlePrefab, pos, Quaternion.identity);

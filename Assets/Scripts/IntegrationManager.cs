@@ -292,6 +292,10 @@ public class IntegrationManager : MonoBehaviour
                 modernUIManager.contextMenu.Initialize(modernUIManager);
                 Debug.Log("ContextMenu initialized");
             }
+
+            // CRITICAL: Setup button event handlers NOW that all references are set
+            modernUIManager.SetupQuickActionsButtons();
+            Debug.Log("Quick Actions buttons event handlers setup completed");
         }
 
         Debug.Log("Modern UI system integration with new turtle architecture completed!");
