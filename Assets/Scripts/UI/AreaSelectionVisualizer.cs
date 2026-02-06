@@ -102,21 +102,12 @@ public class AreaSelectionVisualizer : MonoBehaviour
         marker.transform.position = position;
         marker.transform.localScale = Vector3.one * size;
 
-        // Set material with transparency
+        // Set material with transparency (HDRP compatible)
         Renderer renderer = marker.GetComponent<Renderer>();
         if (renderer != null)
         {
-            Material mat = new Material(Shader.Find("Standard"));
+            Material mat = CreateHDRPTransparentMaterial();
             mat.color = color;
-            mat.SetFloat("_Mode", 3); // Transparent mode
-            mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-            mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-            mat.SetInt("_ZWrite", 0);
-            mat.DisableKeyword("_ALPHATEST_ON");
-            mat.EnableKeyword("_ALPHABLEND_ON");
-            mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
-            mat.renderQueue = 3000;
-
             renderer.material = mat;
         }
 
@@ -215,10 +206,89 @@ public class AreaSelectionVisualizer : MonoBehaviour
         line.SetPosition(0, start);
         line.SetPosition(1, end);
 
-        Material mat = new Material(Shader.Find("Sprites/Default"));
+        Material mat = CreateHDRPLineMaterial();
         mat.color = color;
         line.material = mat;
         line.useWorldSpace = false;
+    }
+
+    /// <summary>
+    /// Creates an HDRP-compatible transparent material
+    /// </summary>
+    private Material CreateHDRPTransparentMaterial()
+    {
+        // Try HDRP/Lit first
+        Shader shader = Shader.Find("HDRP/Lit");
+        if (shader == null)
+        {
+            // Fallback to Standard
+            shader = Shader.Find("Standard");
+        }
+        if (shader == null)
+        {
+            // Last resort
+            shader = Shader.Find("Unlit/Color");
+        }
+
+        Material mat = new Material(shader);
+
+        // Enable transparency
+        if (mat.HasProperty("_SurfaceType"))
+        {
+            // HDRP transparency setup
+            mat.SetFloat("_SurfaceType", 1); // Transparent
+            mat.SetFloat("_BlendMode", 0); // Alpha blend
+            mat.SetFloat("_AlphaCutoffEnable", 0);
+            mat.SetFloat("_ZWrite", 0);
+            mat.renderQueue = 3000;
+        }
+        else
+        {
+            // Standard pipeline transparency setup
+            mat.SetFloat("_Mode", 3); // Transparent mode
+            mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            mat.SetInt("_ZWrite", 0);
+            mat.DisableKeyword("_ALPHATEST_ON");
+            mat.EnableKeyword("_ALPHABLEND_ON");
+            mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            mat.renderQueue = 3000;
+        }
+
+        return mat;
+    }
+
+    /// <summary>
+    /// Creates an HDRP-compatible line material
+    /// </summary>
+    private Material CreateHDRPLineMaterial()
+    {
+        // Try HDRP/Unlit first (best for lines)
+        Shader shader = Shader.Find("HDRP/Unlit");
+        if (shader == null)
+        {
+            shader = Shader.Find("Unlit/Color");
+        }
+        if (shader == null)
+        {
+            shader = Shader.Find("Sprites/Default");
+        }
+        if (shader == null)
+        {
+            // Absolute last resort
+            shader = Shader.Find("Standard");
+        }
+
+        Material mat = new Material(shader);
+
+        // Enable transparency for lines
+        if (mat.HasProperty("_SurfaceType"))
+        {
+            mat.SetFloat("_SurfaceType", 1); // Transparent
+            mat.SetFloat("_BlendMode", 0); // Alpha blend
+        }
+
+        return mat;
     }
 
     private void ClearCurrentSelection()
