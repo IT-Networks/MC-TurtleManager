@@ -146,5 +146,7 @@ public class CacheWriteData
 public struct BlockRecord
 {
     public byte id;
-    public byte x, y, z;
+    public byte x;   // 0-15 within chunk (X coordinate)
+    public short y;  // -64 to 320 in Minecraft 1.18+ (changed from byte to fix overflow)
+    public byte z;   // 0-15 within chunk (Z coordinate)
 }
