@@ -719,7 +719,10 @@ public class TurtleWorldManager : MonoBehaviour
         BlockTextureData data = new BlockTextureData();
 
         // Basisname (z. B. "stone", "grass")
-        string basePath = $"{textureResourceFolder}/{blockName.Split(':')[1]}";
+        // Handle both "minecraft:stone" and "stone" formats
+        string[] parts = blockName.Split(':');
+        string baseName = parts.Length > 1 ? parts[1] : parts[0];
+        string basePath = $"{textureResourceFolder}/{baseName}";
 
         // Prüfe, ob eine einzelne Textur existiert
         Texture2D single = Resources.Load<Texture2D>(basePath);

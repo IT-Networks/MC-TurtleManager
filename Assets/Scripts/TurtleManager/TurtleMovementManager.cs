@@ -24,14 +24,22 @@ public class TurtleMovementManager : MonoBehaviour
     public bool showExcavationWarnings = true;
 
     private TurtleBaseManager baseManager;
+    private TurtleOperationManager operationManager;
     private bool isFollowingPath = false;
     private int currentPathIndex = 0;
     private PathfindingResult currentPathResult;
+    private PathfindingResult lastCompletedPath; // Store last completed path for visualization
     private string cachedDirection = null; // Cache direction locally to avoid stale server status
 
     private void Start()
     {
-        baseManager = FindFirstObjectByType<TurtleBaseManager>();
+        baseManager = GetComponent<TurtleBaseManager>();
+        if (baseManager == null)
+            baseManager = FindFirstObjectByType<TurtleBaseManager>();
+
+        operationManager = GetComponent<TurtleOperationManager>();
+        if (operationManager == null)
+            operationManager = FindFirstObjectByType<TurtleOperationManager>();
 
         // Auto-find pathfinder if not assigned
         if (pathfinder == null)
@@ -70,7 +78,7 @@ public class TurtleMovementManager : MonoBehaviour
         if (baseManager.GetCurrentStatus() == null) yield break;
 
         Vector3 currentPos = baseManager.GetTurtlePosition();
-        
+
         if (Vector3.Distance(currentPos, targetPosition) <= positionTolerance)
         {
             Debug.Log($"Already at target position {targetPosition}");
@@ -80,25 +88,31 @@ public class TurtleMovementManager : MonoBehaviour
         Debug.Log($"Moving turtle from {currentPos} to {targetPosition}");
 
         int retryCount = 0;
-        while (Vector3.Distance(baseManager.GetTurtlePosition(), targetPosition) > positionTolerance && 
+        while (Vector3.Distance(baseManager.GetTurtlePosition(), targetPosition) > positionTolerance &&
                retryCount < maxMovementRetries)
         {
             if (usePathfinding && pathfinder != null)
             {
+                Debug.Log($"[Pathfinding] Attempting to find path from {baseManager.GetTurtlePosition()} to {targetPosition}");
                 var pathResult = pathfinder.FindPath(baseManager.GetTurtlePosition(), targetPosition, defaultPathfindingOptions);
-                
+
                 if (pathResult.success && pathResult.optimizedPath.Count > 0)
                 {
+                    Debug.Log($"[Pathfinding] SUCCESS - Path found with {pathResult.optimizedPath.Count} waypoints");
                     yield return StartCoroutine(FollowOptimizedPath(pathResult.rasterizedPath));
                 }
                 else
                 {
-                    yield return StartCoroutine(MoveDirectlyToPosition(targetPosition));
+                    Debug.LogWarning($"[Pathfinding] FAILED - No valid path found. Reason: {pathResult.errorMessage ?? "Unknown"}");
+                    Debug.LogWarning("Turtle cannot reach destination - skipping movement");
+                    operationManager?.IncrementFailed();
+                    yield break; // Don't try direct movement through blocks
                 }
             }
             else
             {
-                yield return StartCoroutine(MoveDirectlyToPosition(targetPosition));
+                Debug.LogWarning("Pathfinder not available - cannot move safely");
+                yield break;
             }
 
             yield return new WaitUntil(() => !baseManager.IsBusy);
@@ -126,16 +140,20 @@ public class TurtleMovementManager : MonoBehaviour
 
         isFollowingPath = true;
         currentPathResult = new PathfindingResult { optimizedPath = path };
+        lastCompletedPath = currentPathResult; // Store for visualization
         currentPathIndex = 1;
 
         // Reset direction cache at start of new path to sync with server status
         cachedDirection = null;
+
+        Debug.Log($"[Path] Starting path with {path.Count} waypoints");
 
         while (currentPathIndex < path.Count && isFollowingPath)
         {
             Vector3 currentPos = path[currentPathIndex - 1];
             Vector3 nextPos = path[currentPathIndex];
 
+            Debug.Log($"[Path] Moving to waypoint {currentPathIndex}/{path.Count}: {nextPos}");
             yield return StartCoroutine(ExecuteMovementStep(currentPos, nextPos));
             yield return new WaitUntil(() => !baseManager.IsBusy);
 
@@ -689,30 +707,47 @@ public class TurtleMovementManager : MonoBehaviour
         : Vector3.zero;
 
     /// <summary>
-    /// Check if turtle has an active path
+    /// Check if turtle has an active or recently completed path
     /// </summary>
     public bool HasActivePath()
     {
-        return currentPathResult != null &&
-               currentPathResult.optimizedPath != null &&
-               currentPathResult.optimizedPath.Count > 0;
+        // Check active path first
+        if (currentPathResult != null &&
+            currentPathResult.optimizedPath != null &&
+            currentPathResult.optimizedPath.Count > 0)
+        {
+            return true;
+        }
+
+        // Check last completed path as fallback
+        return lastCompletedPath != null &&
+               lastCompletedPath.optimizedPath != null &&
+               lastCompletedPath.optimizedPath.Count > 0;
     }
 
     /// <summary>
-    /// Get the current path (remaining waypoints)
+    /// Get the current path (remaining waypoints if active, or last completed path)
     /// </summary>
     public List<Vector3> GetCurrentPath()
     {
-        if (!HasActivePath())
-            return new List<Vector3>();
-
-        // Return remaining path from current index onwards
-        List<Vector3> remainingPath = new List<Vector3>();
-        for (int i = currentPathIndex; i < currentPathResult.optimizedPath.Count; i++)
+        // If actively following path, return remaining waypoints
+        if (isFollowingPath && currentPathResult != null && currentPathResult.optimizedPath != null)
         {
-            remainingPath.Add(currentPathResult.optimizedPath[i]);
+            List<Vector3> remainingPath = new List<Vector3>();
+            for (int i = currentPathIndex; i < currentPathResult.optimizedPath.Count; i++)
+            {
+                remainingPath.Add(currentPathResult.optimizedPath[i]);
+            }
+            return remainingPath;
         }
-        return remainingPath;
+
+        // Otherwise return last completed path (for visualization after completion)
+        if (lastCompletedPath != null && lastCompletedPath.optimizedPath != null)
+        {
+            return new List<Vector3>(lastCompletedPath.optimizedPath);
+        }
+
+        return new List<Vector3>();
     }
 
     /// <summary>
@@ -720,10 +755,17 @@ public class TurtleMovementManager : MonoBehaviour
     /// </summary>
     public List<Vector3> GetFullPath()
     {
-        if (!HasActivePath())
-            return new List<Vector3>();
+        if (currentPathResult != null && currentPathResult.optimizedPath != null)
+        {
+            return new List<Vector3>(currentPathResult.optimizedPath);
+        }
 
-        return new List<Vector3>(currentPathResult.optimizedPath);
+        if (lastCompletedPath != null && lastCompletedPath.optimizedPath != null)
+        {
+            return new List<Vector3>(lastCompletedPath.optimizedPath);
+        }
+
+        return new List<Vector3>();
     }
 
     #endregion
