@@ -162,7 +162,8 @@ public class ModernUIBuilder : MonoBehaviour
         if (modernUIManager != null)
             modernUIManager.turtleList = listPanel;
 
-        panel.SetActive(true);
+        // Initially hidden - user can toggle with T key or button
+        panel.SetActive(false);
     }
 
     #endregion
@@ -403,33 +404,42 @@ public class ModernUIBuilder : MonoBehaviour
 
     private void BuildQuickActionsPanel()
     {
-        GameObject panel = CreatePanel("QuickActionsPanel", new Vector2(0, -450), new Vector2(800, 80));
+        GameObject panel = CreatePanel("QuickActionsPanel", new Vector2(0, -450), new Vector2(900, 90));
 
         if (modernUIManager != null)
             modernUIManager.quickActionsPanel = panel;
 
         CreateTMPText(panel, "QuickActionsLabel", "Quick Actions",
-            new Vector2(-320, 20), new Vector2(120, 20), 12, TextAlignmentOptions.Left);
+            new Vector2(-380, 25), new Vector2(120, 20), 12, TextAlignmentOptions.Left);
+
+        // Status text showing selection info
+        TextMeshProUGUI statusText = CreateTMPText(panel, "SelectionStatusText", "No selection - Press M for Mining Mode",
+            new Vector2(0, 25), new Vector2(500, 20), 12, TextAlignmentOptions.Center);
+        statusText.color = new Color(0.8f, 0.8f, 0.2f); // Yellow
+
+        // Assign to ModernUIManager
+        if (modernUIManager != null)
+            modernUIManager.selectionStatusText = statusText;
 
         GameObject buttonsContainer = new GameObject("ButtonsContainer");
         buttonsContainer.transform.SetParent(panel.transform, false);
         RectTransform buttonsRect = buttonsContainer.AddComponent<RectTransform>();
-        buttonsRect.anchoredPosition = new Vector2(0, -10);
-        buttonsRect.sizeDelta = new Vector2(750, 40);
+        buttonsRect.anchoredPosition = new Vector2(-50, -15);
+        buttonsRect.sizeDelta = new Vector2(800, 40);
 
         // Create buttons - event handlers will be set up by ModernUIManager.SetupQuickActionsButtons()
         CreateButton(buttonsContainer, "MiningMode", "Mining (M)",
-            new Vector2(-280, 0), new Vector2(100, 35), new Color(0.8f, 0.2f, 0.2f));
+            new Vector2(-330, 0), new Vector2(100, 35), new Color(0.8f, 0.2f, 0.2f));
         CreateButton(buttonsContainer, "BuildingMode", "Building (B)",
-            new Vector2(-165, 0), new Vector2(100, 35), new Color(0.2f, 0.6f, 0.2f));
+            new Vector2(-215, 0), new Vector2(100, 35), new Color(0.2f, 0.6f, 0.2f));
         CreateButton(buttonsContainer, "TurtleList", "Turtles (T)",
-            new Vector2(-50, 0), new Vector2(100, 35), new Color(0.2f, 0.4f, 0.6f));
+            new Vector2(-100, 0), new Vector2(100, 35), new Color(0.2f, 0.4f, 0.6f));
         CreateButton(buttonsContainer, "TaskQueue", "Tasks (Q)",
-            new Vector2(65, 0), new Vector2(100, 35), new Color(0.6f, 0.4f, 0.2f));
-        CreateButton(buttonsContainer, "StructureEditor", "Editor (E)",
-            new Vector2(180, 0), new Vector2(100, 35), new Color(0.4f, 0.2f, 0.6f));
-        CreateButton(buttonsContainer, "Settings", "Settings",
-            new Vector2(295, 0), new Vector2(100, 35), new Color(0.4f, 0.4f, 0.4f));
+            new Vector2(15, 0), new Vector2(100, 35), new Color(0.6f, 0.4f, 0.2f));
+        CreateButton(buttonsContainer, "ExecuteSelection", "Execute (Enter)",
+            new Vector2(130, 0), new Vector2(120, 35), new Color(0.2f, 0.8f, 0.2f));
+        CreateButton(buttonsContainer, "CancelSelection", "Cancel (Esc)",
+            new Vector2(265, 0), new Vector2(110, 35), new Color(0.8f, 0.2f, 0.2f));
 
         panel.SetActive(true);
     }

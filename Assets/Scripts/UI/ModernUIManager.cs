@@ -35,6 +35,9 @@ public class ModernUIManager : MonoBehaviour
     public KeyCode contextMenuKey = KeyCode.Mouse1; // Right-click
     public bool enableHotkeys = true;
 
+    [Header("Status Display")]
+    public TextMeshProUGUI selectionStatusText;
+
     // Hotkey Reference:
     // M - Toggle Mining Mode
     // B - Toggle Building Mode / Structure Selection
@@ -134,6 +137,12 @@ public class ModernUIManager : MonoBehaviour
     {
         if (quickActionsPanel == null) return;
 
+        // Find selection status text
+        if (selectionStatusText == null)
+        {
+            selectionStatusText = quickActionsPanel.GetComponentInChildren<TextMeshProUGUI>();
+        }
+
         // Find all buttons in QuickActionsPanel
         UnityEngine.UI.Button[] buttons = quickActionsPanel.GetComponentsInChildren<UnityEngine.UI.Button>(true);
 
@@ -148,7 +157,10 @@ public class ModernUIManager : MonoBehaviour
                 case "MiningMode":
                     btn.onClick.AddListener(() => {
                         if (areaSelectionManager != null)
+                        {
                             areaSelectionManager.ToggleMode(AreaSelectionManager.SelectionMode.Mining);
+                            UpdateSelectionStatus();
+                        }
                     });
                     break;
 
@@ -156,7 +168,10 @@ public class ModernUIManager : MonoBehaviour
                     btn.onClick.AddListener(() => {
                         ToggleStructureSelection();
                         if (areaSelectionManager != null)
+                        {
                             areaSelectionManager.ToggleMode(AreaSelectionManager.SelectionMode.Building);
+                            UpdateSelectionStatus();
+                        }
                     });
                     break;
 
@@ -166,6 +181,26 @@ public class ModernUIManager : MonoBehaviour
 
                 case "TaskQueue":
                     btn.onClick.AddListener(() => ToggleTaskQueue());
+                    break;
+
+                case "ExecuteSelection":
+                    btn.onClick.AddListener(() => {
+                        if (areaSelectionManager != null)
+                        {
+                            areaSelectionManager.ExecuteSelectedOperation();
+                            UpdateSelectionStatus();
+                        }
+                    });
+                    break;
+
+                case "CancelSelection":
+                    btn.onClick.AddListener(() => {
+                        if (areaSelectionManager != null)
+                        {
+                            areaSelectionManager.CancelSelection();
+                            UpdateSelectionStatus();
+                        }
+                    });
                     break;
 
                 case "StructureEditor":
@@ -252,8 +287,33 @@ public class ModernUIManager : MonoBehaviour
 
     private void UpdateUIState()
     {
-        // Update UI based on current state
-        // This can be used for dynamic UI updates
+        // Update selection status display
+        UpdateSelectionStatus();
+    }
+
+    private void UpdateSelectionStatus()
+    {
+        if (selectionStatusText == null || areaSelectionManager == null) return;
+
+        var mode = areaSelectionManager.CurrentMode;
+        var selectedCount = areaSelectionManager.SelectedBlocks.Count;
+        var validCount = areaSelectionManager.ValidBlocks.Count;
+
+        if (mode == AreaSelectionManager.SelectionMode.None)
+        {
+            selectionStatusText.text = "No selection - Press M for Mining, B for Building";
+            selectionStatusText.color = new Color(0.6f, 0.6f, 0.6f);
+        }
+        else if (selectedCount == 0)
+        {
+            selectionStatusText.text = $"{mode} Mode - Click and drag to select area";
+            selectionStatusText.color = new Color(0.8f, 0.8f, 0.2f);
+        }
+        else
+        {
+            selectionStatusText.text = $"{selectedCount} blocks selected ({validCount} valid) - Press ENTER or click Execute";
+            selectionStatusText.color = new Color(0.2f, 1.0f, 0.2f);
+        }
     }
 
     // Public API for UI control
