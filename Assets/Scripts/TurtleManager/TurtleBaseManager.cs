@@ -73,10 +73,10 @@ public class TurtleBaseManager : MonoBehaviour
                     {
                         label = status.label,
                         direction = status.direction,
-                        position = new Position { 
-                            x = -(int)status.position.x - 1, 
-                            y = (int)status.position.y + 128, 
-                            z = (int)status.position.z 
+                        position = new Position {
+                            x = (int)status.position.x,  // Store RAW Minecraft X (conversion in GetTurtlePosition)
+                            y = (int)status.position.y,  // Store RAW Minecraft Y (conversion in GetTurtlePosition)
+                            z = (int)status.position.z   // Store RAW Minecraft Z (no conversion needed)
                         },
                         fuelLevel = 1000,
                         isBusy = false
@@ -212,12 +212,12 @@ public class TurtleBaseManager : MonoBehaviour
     {
         if (currentTurtleBaseStatus == null) return Vector3.zero;
 
-        // Return Unity coordinates (X negated, Y with offset)
-        // This matches the visual position from TurtleObject.UpdateStatus()
+        // Convert RAW Minecraft coordinates to Unity coordinates
+        // This MUST match TurtleObject.UpdateStatus() exactly: new Vector3(-status.position.x, status.position.y + offset, status.position.z)
         return new Vector3(
-            -(currentTurtleBaseStatus.position.x + 1),  // Negate X for Unity
-            currentTurtleBaseStatus.position.y + MultiTurtleManager.WorldYOffset,  // Apply Y offset
-            currentTurtleBaseStatus.position.z
+            -currentTurtleBaseStatus.position.x,  // Negate X for Unity (Minecraft +X = Unity -X)
+            currentTurtleBaseStatus.position.y + MultiTurtleManager.WorldYOffset,  // Apply Y offset (Minecraft Y=-64 -> Unity Y=0)
+            currentTurtleBaseStatus.position.z    // Z stays the same
         );
     }
 
