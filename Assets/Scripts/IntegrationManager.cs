@@ -23,10 +23,9 @@ public class IntegrationManager : MonoBehaviour
     [Header("Construction System")]
     public AreaSelectionManager areaSelectionManager;
     public StructureManager structureManager;
-    public ServerUpdateManager serverUpdateManager;
     public ModernUIManager modernUIManager;
     public MultiTurtleManager multiTurtleManager;
-    
+
     [Header("Auto-Setup")]
     public bool autoSetupComponents = true;
     public bool createUICanvas = true;
@@ -175,7 +174,6 @@ public class IntegrationManager : MonoBehaviour
     {
         SetupAreaSelectionManager();
         SetupStructureManager();
-        SetupServerUpdateManager();
     }
     
     private void SetupAreaSelectionManager()
@@ -201,19 +199,6 @@ public class IntegrationManager : MonoBehaviour
             structureObj.transform.SetParent(transform);
             structureManager = structureObj.AddComponent<StructureManager>();
         }
-    }
-    
-    private void SetupServerUpdateManager()
-    {
-        if (serverUpdateManager == null)
-        {
-            GameObject updateObj = new GameObject("ServerUpdateManager");
-            updateObj.transform.SetParent(transform);
-            serverUpdateManager = updateObj.AddComponent<ServerUpdateManager>();
-        }
-        
-        // Setup references
-        serverUpdateManager.worldManager = worldManager;
     }
     
     private void SetupModernUI()
@@ -389,11 +374,6 @@ public class IntegrationManager : MonoBehaviour
         if (turtleMainController != null)
         {
             turtleMainController.CancelCurrentOperation();
-        }
-        
-        if (serverUpdateManager != null)
-        {
-            serverUpdateManager.ClearAllGizmos();
         }
     }
     
