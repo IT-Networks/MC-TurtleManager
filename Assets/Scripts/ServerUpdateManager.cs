@@ -6,10 +6,13 @@ using System;
 
 /// <summary>
 /// Manages block updates from the server and visualizes them with gizmos
+/// OPTIONAL: Requires separate update server on port 4567 (disabled by default in IntegrationManager)
+/// This is a debugging/monitoring tool - not required for core functionality
 /// </summary>
 public class ServerUpdateManager : MonoBehaviour
 {
     [Header("Server Settings")]
+    [Tooltip("URL for block updates endpoint (requires separate server on port 4567)")]
     public string blockUpdateUrl = "http://localhost:4567/updates";
     public float updateCheckInterval = 1f;
     public int maxUpdatesPerFrame = 50;

@@ -26,11 +26,15 @@ public class IntegrationManager : MonoBehaviour
     public ServerUpdateManager serverUpdateManager;
     public ModernUIManager modernUIManager;
     public MultiTurtleManager multiTurtleManager;
-    
+
     [Header("Auto-Setup")]
     public bool autoSetupComponents = true;
     public bool createUICanvas = true;
     public bool setupModularTurtleSystem = true;
+
+    [Header("Optional Systems")]
+    [Tooltip("Enable ServerUpdateManager (requires server on port 4567 - disabled if not needed)")]
+    public bool enableServerUpdateManager = false; // Disabled by default - requires separate update server
     
     private void Awake()
     {
@@ -205,15 +209,23 @@ public class IntegrationManager : MonoBehaviour
     
     private void SetupServerUpdateManager()
     {
+        // ServerUpdateManager is optional - requires separate update server on port 4567
+        if (!enableServerUpdateManager)
+        {
+            Debug.Log("ServerUpdateManager disabled (requires separate update server on port 4567)");
+            return;
+        }
+
         if (serverUpdateManager == null)
         {
             GameObject updateObj = new GameObject("ServerUpdateManager");
             updateObj.transform.SetParent(transform);
             serverUpdateManager = updateObj.AddComponent<ServerUpdateManager>();
         }
-        
+
         // Setup references
         serverUpdateManager.worldManager = worldManager;
+        Debug.Log("ServerUpdateManager enabled - monitoring updates from port 4567");
     }
     
     private void SetupModernUI()
