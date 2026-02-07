@@ -351,26 +351,19 @@ public class StructureEditorManager : MonoBehaviour
     /// <summary>
     /// Creates a block object using the comprehensive BlockMeshGenerator system
     /// Handles ALL block types: cubes, slabs, stairs, fences, plants, pipes, etc.
+    /// Uses BlockMaterialProvider for correct texture mapping per block type
     /// </summary>
     private GameObject CreateBlockObject(Vector3 position, string blockType)
     {
         // Detect model type using the comprehensive BlockModelDetector
         BlockModelType modelType = BlockModelDetector.GetModelType(blockType);
 
-        // Load material from TurtleWorldManager
-        Material blockMaterial = null;
+        // Get appropriate material using BlockMaterialProvider
+        // This ensures correct texture mapping for each block type:
+        // - Cubes: Use multi-texture shader from TurtleWorldManager
+        // - Other blocks: Use single-texture material for correct UV mapping
         TurtleWorldManager worldManager = FindFirstObjectByType<TurtleWorldManager>();
-        if (worldManager != null)
-        {
-            blockMaterial = worldManager.GetMaterialForBlock(blockType);
-        }
-
-        // Fallback material if not found
-        if (blockMaterial == null)
-        {
-            blockMaterial = new Material(Shader.Find("Standard"));
-            blockMaterial.color = GetBlockColor(blockType);
-        }
+        Material blockMaterial = BlockMaterialProvider.GetMaterialForBlock(blockType, modelType, worldManager);
 
         // Generate mesh using BlockMeshGenerator
         GameObject blockObj = BlockMeshGenerator.GenerateBlockMesh(position, blockType, modelType, blockMaterial);

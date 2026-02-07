@@ -18,6 +18,8 @@ public static class BlockMeshGenerator
     /// <summary>
     /// Generates a mesh for a given block type at the specified position
     /// Returns a configured GameObject with mesh, material, and collider
+    ///
+    /// NOTE: Material should be obtained from BlockMaterialProvider for correct texture mapping
     /// </summary>
     public static GameObject GenerateBlockMesh(Vector3 position, string blockType, BlockModelType modelType, Material material = null)
     {
@@ -816,34 +818,84 @@ public static class BlockMeshGenerator
         return mesh;
     }
 
+    /// <summary>
+    /// Adds a box with CORRECT UV mapping for each face
+    /// Each face gets proper 0,0 to 1,1 UVs for correct texture display
+    /// </summary>
     private static void AddBox(List<Vector3> vertices, List<Vector2> uvs, List<int> triangles, Vector3 min, Vector3 max)
+    {
+        // Each face needs its own vertices for proper UV mapping
+        // We cannot share vertices between faces because UVs differ
+
+        // Back face (-Z)
+        AddQuadForBox(vertices, uvs, triangles,
+            new Vector3(min.x, min.y, min.z),
+            new Vector3(max.x, min.y, min.z),
+            new Vector3(max.x, max.y, min.z),
+            new Vector3(min.x, max.y, min.z));
+
+        // Front face (+Z)
+        AddQuadForBox(vertices, uvs, triangles,
+            new Vector3(max.x, min.y, max.z),
+            new Vector3(min.x, min.y, max.z),
+            new Vector3(min.x, max.y, max.z),
+            new Vector3(max.x, max.y, max.z));
+
+        // Bottom face (-Y)
+        AddQuadForBox(vertices, uvs, triangles,
+            new Vector3(min.x, min.y, min.z),
+            new Vector3(min.x, min.y, max.z),
+            new Vector3(max.x, min.y, max.z),
+            new Vector3(max.x, min.y, min.z));
+
+        // Top face (+Y)
+        AddQuadForBox(vertices, uvs, triangles,
+            new Vector3(min.x, max.y, max.z),
+            new Vector3(min.x, max.y, min.z),
+            new Vector3(max.x, max.y, min.z),
+            new Vector3(max.x, max.y, max.z));
+
+        // Left face (-X)
+        AddQuadForBox(vertices, uvs, triangles,
+            new Vector3(min.x, min.y, max.z),
+            new Vector3(min.x, min.y, min.z),
+            new Vector3(min.x, max.y, min.z),
+            new Vector3(min.x, max.y, max.z));
+
+        // Right face (+X)
+        AddQuadForBox(vertices, uvs, triangles,
+            new Vector3(max.x, min.y, min.z),
+            new Vector3(max.x, min.y, max.z),
+            new Vector3(max.x, max.y, max.z),
+            new Vector3(max.x, max.y, min.z));
+    }
+
+    /// <summary>
+    /// Helper to add a quad with correct UVs for box faces
+    /// </summary>
+    private static void AddQuadForBox(List<Vector3> vertices, List<Vector2> uvs, List<int> triangles,
+        Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3)
     {
         int startIdx = vertices.Count;
 
-        vertices.Add(new Vector3(min.x, min.y, min.z));
-        vertices.Add(new Vector3(max.x, min.y, min.z));
-        vertices.Add(new Vector3(max.x, max.y, min.z));
-        vertices.Add(new Vector3(min.x, max.y, min.z));
-        vertices.Add(new Vector3(min.x, min.y, max.z));
-        vertices.Add(new Vector3(max.x, min.y, max.z));
-        vertices.Add(new Vector3(max.x, max.y, max.z));
-        vertices.Add(new Vector3(min.x, max.y, max.z));
+        vertices.Add(v0);
+        vertices.Add(v1);
+        vertices.Add(v2);
+        vertices.Add(v3);
 
-        for (int i = 0; i < 8; i++)
-            uvs.Add(new Vector2(0.5f, 0.5f));
+        // Proper UV mapping: 0,0 (bottom-left) to 1,1 (top-right)
+        uvs.Add(new Vector2(0, 0));
+        uvs.Add(new Vector2(1, 0));
+        uvs.Add(new Vector2(1, 1));
+        uvs.Add(new Vector2(0, 1));
 
-        // 6 faces
-        int[] faceIndices = {
-            0, 2, 1, 0, 3, 2, // Back
-            4, 5, 6, 4, 6, 7, // Front
-            0, 1, 5, 0, 5, 4, // Bottom
-            3, 7, 6, 3, 6, 2, // Top
-            0, 4, 7, 0, 7, 3, // Left
-            1, 2, 6, 1, 6, 5  // Right
-        };
-
-        foreach (int idx in faceIndices)
-            triangles.Add(startIdx + idx);
+        // Two triangles forming a quad
+        triangles.Add(startIdx + 0);
+        triangles.Add(startIdx + 2);
+        triangles.Add(startIdx + 1);
+        triangles.Add(startIdx + 0);
+        triangles.Add(startIdx + 3);
+        triangles.Add(startIdx + 2);
     }
 
     private static void AddQuad(List<Vector3> vertices, List<Vector2> uvs, List<int> triangles,
