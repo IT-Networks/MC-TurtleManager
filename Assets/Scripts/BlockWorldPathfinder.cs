@@ -216,16 +216,25 @@ public class BlockWorldPathfinder : MonoBehaviour
     private void ConfigureNavMeshSurface(NavMeshSurface surface)
     {
         surface.agentTypeID = 0;
-        surface.collectObjects = CollectObjects.Children;
+        surface.collectObjects = CollectObjects.Volume;  // CHANGED: Collect from volume, not children
         surface.layerMask = navigationLayers;
+
+        // CRITICAL FIX: Use PhysicsColliders to automatically detect obstacles
+        // The chunk's MeshCollider represents solid blocks, which will become obstacles
+        // NavMesh will create walkable surfaces ON TOP of these colliders
         surface.useGeometry = NavMeshCollectGeometry.PhysicsColliders;
+
         surface.defaultArea = 0;
         surface.ignoreNavMeshAgent = true;
         surface.ignoreNavMeshObstacle = true;
         surface.overrideVoxelSize = true;
-        surface.voxelSize = 0.166f;
+        surface.voxelSize = 0.25f;  // Increased from 0.166 for better block alignment
         surface.buildHeightMesh = false;
-        surface.minRegionArea = 2f;
+        surface.minRegionArea = 1f;  // Reduced minimum area to allow single-block paths
+
+        // CRITICAL: Configure agent settings for block-based navigation
+        surface.overrideTileSize = true;
+        surface.tileSize = 64;  // Smaller tiles for better chunk-based updates
     }
 
     private void ProcessPendingBuilds()
@@ -282,24 +291,70 @@ public class BlockWorldPathfinder : MonoBehaviour
 
         foreach (var block in allBlocks)
         {
-            if (IsBlockWalkable(block.blockType))
+            if (IsBlockSolid(block.blockType))
             {
-                // Create walkable surface on top of solid blocks
-                var source = new NavMeshBuildSource
+                // CRITICAL FIX: Mark solid blocks as OBSTACLES, not walkable surfaces
+                // This prevents the turtle from trying to walk through blocks
+                var obstacleSource = new NavMeshBuildSource
                 {
                     shape = NavMeshBuildSourceShape.Box,
                     transform = Matrix4x4.TRS(
-                        block.worldPosition + Vector3.up * 0.5f,
+                        block.worldPosition,  // Block position (not +0.5 up)
                         Quaternion.identity,
                         Vector3.one
                     ),
                     size = Vector3.one,
-                    area = GetNavMeshAreaForBlock(block.blockType)
+                    area = 1  // NavMesh area 1 = Not Walkable (obstacle)
                 };
 
-                navMeshData.sources.Add(source);
+                navMeshData.sources.Add(obstacleSource);
+
+                // Create walkable surface ABOVE the solid block (in the air space)
+                Vector3 surfacePosition = block.worldPosition + Vector3.up;
+
+                // Only create walkable surface if there's air above this block
+                if (IsAirBlock(chunkInfo.GetBlockTypeAt(surfacePosition)))
+                {
+                    var walkableSurface = new NavMeshBuildSource
+                    {
+                        shape = NavMeshBuildSourceShape.Box,
+                        transform = Matrix4x4.TRS(
+                            surfacePosition + Vector3.up * 0.4f,  // Thin surface just above block
+                            Quaternion.identity,
+                            new Vector3(1f, 0.1f, 1f)  // Thin horizontal surface
+                        ),
+                        size = new Vector3(1f, 0.1f, 1f),
+                        area = 0  // NavMesh area 0 = Walkable
+                    };
+
+                    navMeshData.sources.Add(walkableSurface);
+                }
             }
         }
+    }
+
+    /// <summary>
+    /// Check if block is solid (not air, water, or lava)
+    /// </summary>
+    private bool IsBlockSolid(string blockType)
+    {
+        if (string.IsNullOrEmpty(blockType)) return false;
+
+        string lower = blockType.ToLowerInvariant();
+        return !lower.Contains("water") &&
+               !lower.Contains("lava") &&
+               !lower.Contains("air");
+    }
+
+    /// <summary>
+    /// Check if block is air or empty
+    /// </summary>
+    private bool IsAirBlock(string blockType)
+    {
+        if (string.IsNullOrEmpty(blockType)) return true;
+
+        string lower = blockType.ToLowerInvariant();
+        return lower.Contains("air") || lower == "";
     }
 
     #endregion
@@ -810,7 +865,29 @@ private Vector3 FindAlternativeStep(Vector3 current, Vector3 target, Vector3 blo
         if (Mathf.Abs(diff.x) + Mathf.Abs(diff.y) + Mathf.Abs(diff.z) != 1f)
             return false;
 
-        return IsPositionWalkable(to, options);
+        // CRITICAL FIX: Check if destination is walkable
+        if (!IsPositionWalkable(to, options))
+            return false;
+
+        // CRITICAL FIX: Check if there's a solid block at the destination that would block movement
+        // This prevents the turtle from trying to walk through blocks
+        var chunk = worldManager.GetChunkContaining(to);
+        if (chunk != null && chunk.IsLoaded)
+        {
+            var chunkInfo = chunk.GetChunkInfo();
+            if (chunkInfo != null)
+            {
+                var blockType = chunkInfo.GetBlockTypeAt(to);
+
+                // If there's a solid block at the destination, can't step there
+                if (IsBlockSolid(blockType))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -929,17 +1006,7 @@ private Vector3 FindAlternativeStep(Vector3 current, Vector3 target, Vector3 blo
 
     #endregion
 
-    #region Utility Methods (unchanged from original)
-
-    private bool IsBlockWalkable(string blockType)
-    {
-        if (string.IsNullOrEmpty(blockType)) return false;
-
-        string lower = blockType.ToLowerInvariant();
-        return !lower.Contains("water") &&
-               !lower.Contains("lava") &&
-               !lower.Contains("air");
-    }
+    #region Utility Methods
 
     private int GetNavMeshAreaForBlock(string blockType)
     {
@@ -1188,20 +1255,22 @@ private Vector3 FindAlternativeStep(Vector3 current, Vector3 target, Vector3 blo
         if (chunk == null || !chunk.IsLoaded) return false;
 
         var chunkInfo = chunk.GetChunkInfo();
-        if (chunkInfo == null) return true;
+        if (chunkInfo == null) return false;  // FIXED: Return false if no chunk info (was true)
 
         var blockType = chunkInfo.GetBlockTypeAt(position);
 
         if (options.canFly && enableVerticalMovement)
         {
-            return string.IsNullOrEmpty(blockType);
+            // Flying: position must be air (no solid block)
+            return !IsBlockSolid(blockType);
         }
         else
         {
+            // Walking: position must be air AND ground below must be solid
             var groundPosition = position + Vector3.down;
             var groundType = chunkInfo.GetBlockTypeAt(groundPosition);
 
-            return string.IsNullOrEmpty(blockType) && IsBlockWalkable(groundType);
+            return !IsBlockSolid(blockType) && IsBlockSolid(groundType);
         }
     }
 

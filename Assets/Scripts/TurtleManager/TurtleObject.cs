@@ -365,8 +365,18 @@ public class TurtleObject : MonoBehaviour
         // Enable transparency for line
         if (mat.HasProperty("_SurfaceType"))
         {
+            // HDRP transparency settings
             mat.SetFloat("_SurfaceType", 1); // Transparent
             mat.SetFloat("_BlendMode", 0); // Alpha blend
+            mat.SetFloat("_ZWrite", 0);
+            mat.SetFloat("_AlphaCutoffEnable", 0);
+
+            // Enable keywords for transparency
+            mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            mat.EnableKeyword("_BLENDMODE_ALPHA");
+
+            // CRITICAL: Render queue must be 3000+ for HDRP transparent objects
+            mat.renderQueue = 3000;
         }
 
         return mat;
