@@ -35,6 +35,9 @@ public class ChunkMeshBuilder
                     string blockName = data.GetBlock(x, y, z);
                     if (blockName == null) continue;
 
+                    // FILTER: Skip turtle blocks - they are spawned separately as entities
+                    if (IsTurtleBlock(blockName)) continue;
+
                     if (!submeshes.TryGetValue(blockName, out var sb))
                         submeshes[blockName] = sb = new SubmeshBuild();
 
@@ -291,6 +294,19 @@ public class ChunkMeshBuilder
     {
         string lower = blockName.ToLowerInvariant();
         return lower.Contains("chain");
+    }
+
+    /// <summary>
+    /// Checks if a block is a ComputerCraft turtle
+    /// Turtles are spawned separately as entities, so they should not be rendered in chunks
+    /// </summary>
+    private bool IsTurtleBlock(string blockName)
+    {
+        string lower = blockName.ToLowerInvariant();
+
+        // ComputerCraft / CC:Tweaked turtle blocks
+        // Examples: "computercraft:turtle", "computercraft:turtle_advanced", "cc:turtle"
+        return lower.Contains("turtle");
     }
 
     /// <summary>
