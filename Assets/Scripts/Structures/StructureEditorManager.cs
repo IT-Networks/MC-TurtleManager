@@ -22,6 +22,7 @@ public class StructureEditorManager : MonoBehaviour
     public TextMeshProUGUI blockCountText;
     public TextMeshProUGUI dimensionsText;
     public Button saveButton;
+    public Button backToMainSceneButton;  // NEW: Back to main scene
     public Button newButton;
     public Button loadButton;
     public Button clearButton;
@@ -87,6 +88,9 @@ public class StructureEditorManager : MonoBehaviour
     {
         if (saveButton != null)
             saveButton.onClick.AddListener(SaveCurrentStructure);
+
+        if (backToMainSceneButton != null)
+            backToMainSceneButton.onClick.AddListener(BackToMainScene);
 
         if (newButton != null)
             newButton.onClick.AddListener(CreateNewStructure);
@@ -226,6 +230,38 @@ public class StructureEditorManager : MonoBehaviour
     private Vector3Int? GetGridPositionUnderMouse()
     {
         Ray ray = editorCamera.ScreenPointToRay(Input.mousePosition);
+
+        // IMPROVED: First try raycasting against existing blocks for better stacking
+        RaycastHit hit;
+        if (Physics.Raycast(ray, out hit, 1000f))
+        {
+            // Use hit normal to determine which face was hit
+            // Place block adjacent to the hit face in placement mode
+            // For deletion mode, use the hit block's position
+            Vector3 point;
+
+            if (isPlacementMode)
+            {
+                // Place on the surface the mouse is pointing at
+                point = hit.point + hit.normal * (gridSpacing * 0.5f);
+            }
+            else
+            {
+                // Delete the block we're pointing at
+                point = hit.point - hit.normal * (gridSpacing * 0.5f);
+            }
+
+            int x = Mathf.RoundToInt(point.x / gridSpacing);
+            int y = Mathf.RoundToInt(point.y / gridSpacing);
+            int z = Mathf.RoundToInt(point.z / gridSpacing);
+
+            if (Mathf.Abs(x) <= gridSize && Mathf.Abs(y) <= gridSize && Mathf.Abs(z) <= gridSize)
+            {
+                return new Vector3Int(x, y, z);
+            }
+        }
+
+        // Fallback: Raycast against ground plane (Y=0) only when no blocks hit
         Plane gridPlane = new Plane(Vector3.up, Vector3.zero);
         float distance;
 
@@ -235,27 +271,11 @@ public class StructureEditorManager : MonoBehaviour
 
             // Snap to grid
             int x = Mathf.RoundToInt(point.x / gridSpacing);
-            int y = Mathf.RoundToInt(point.y / gridSpacing);
+            int y = 0; // Always place at Y=0 when using ground plane
             int z = Mathf.RoundToInt(point.z / gridSpacing);
 
             // Clamp to grid bounds
-            if (Mathf.Abs(x) <= gridSize && Mathf.Abs(y) <= gridSize && Mathf.Abs(z) <= gridSize)
-            {
-                return new Vector3Int(x, y, z);
-            }
-        }
-
-        // Also try raycasting against existing blocks
-        RaycastHit hit;
-        if (Physics.Raycast(ray, out hit, 1000f))
-        {
-            Vector3 point = hit.point + hit.normal * (gridSpacing * 0.5f);
-
-            int x = Mathf.RoundToInt(point.x / gridSpacing);
-            int y = Mathf.RoundToInt(point.y / gridSpacing);
-            int z = Mathf.RoundToInt(point.z / gridSpacing);
-
-            if (Mathf.Abs(x) <= gridSize && Mathf.Abs(y) <= gridSize && Mathf.Abs(z) <= gridSize)
+            if (Mathf.Abs(x) <= gridSize && Mathf.Abs(z) <= gridSize)
             {
                 return new Vector3Int(x, y, z);
             }
@@ -328,21 +348,27 @@ public class StructureEditorManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Creates a block object using the comprehensive BlockMeshGenerator system
+    /// Handles ALL block types: cubes, slabs, stairs, fences, plants, pipes, etc.
+    /// Uses BlockMaterialProvider for correct texture mapping per block type
+    /// </summary>
     private GameObject CreateBlockObject(Vector3 position, string blockType)
     {
-        GameObject blockObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        blockObj.transform.position = position;
-        blockObj.transform.localScale = Vector3.one * gridSpacing * 0.98f;
-        blockObj.transform.SetParent(gridContainer);
+        // Detect model type using the comprehensive BlockModelDetector
+        BlockModelType modelType = BlockModelDetector.GetModelType(blockType);
 
-        // TODO: Load actual block textures based on blockType
-        Renderer renderer = blockObj.GetComponent<Renderer>();
-        if (renderer != null && blockPreviewMaterial != null)
-        {
-            renderer.material = new Material(blockPreviewMaterial);
-            // Set color based on block type for now
-            renderer.material.color = GetBlockColor(blockType);
-        }
+        // Get appropriate material using BlockMaterialProvider
+        // This ensures correct texture mapping for each block type:
+        // - Cubes: Use multi-texture shader from TurtleWorldManager
+        // - Other blocks: Use single-texture material for correct UV mapping
+        TurtleWorldManager worldManager = FindFirstObjectByType<TurtleWorldManager>();
+        Material blockMaterial = BlockMaterialProvider.GetMaterialForBlock(blockType, modelType, worldManager);
+
+        // Generate mesh using BlockMeshGenerator
+        GameObject blockObj = BlockMeshGenerator.GenerateBlockMesh(position, blockType, modelType, blockMaterial);
+        blockObj.name = $"Block_{blockType}";
+        blockObj.transform.SetParent(gridContainer);
 
         return blockObj;
     }
@@ -377,12 +403,17 @@ public class StructureEditorManager : MonoBehaviour
         previewBlockObject.SetActive(false);
     }
 
+    // === OLD BLOCK RENDERING FUNCTIONS REMOVED ===
+    // Now using BlockModelType and BlockMeshGenerator for ALL block types
+    // This provides comprehensive support for:
+    // - Cubes, slabs, stairs, carpets
+
     private Color GetBlockColor(string blockType)
     {
         // Simple color mapping for common blocks
         if (blockType.Contains("stone")) return new Color(0.5f, 0.5f, 0.5f);
         if (blockType.Contains("dirt")) return new Color(0.6f, 0.4f, 0.2f);
-        if (blockType.Contains("grass")) return new Color(0.3f, 0.7f, 0.3f);
+        if (blockType.Contains("grass") && blockType.Contains("block")) return new Color(0.3f, 0.7f, 0.3f);
         if (blockType.Contains("wood")) return new Color(0.6f, 0.4f, 0.2f);
         if (blockType.Contains("cobblestone")) return new Color(0.4f, 0.4f, 0.4f);
         if (blockType.Contains("planks")) return new Color(0.7f, 0.5f, 0.3f);
@@ -492,6 +523,15 @@ public class StructureEditorManager : MonoBehaviour
             structureManager.SaveStructure(currentStructure);
             Debug.Log($"Saved structure: {currentStructure.name}");
         }
+    }
+
+    /// <summary>
+    /// Returns to the main scene (OutdoorsScene)
+    /// </summary>
+    public void BackToMainScene()
+    {
+        Debug.Log("Returning to main scene...");
+        UnityEngine.SceneManagement.SceneManager.LoadScene("OutdoorsScene");
     }
 
     public void ClearAllBlocks()
