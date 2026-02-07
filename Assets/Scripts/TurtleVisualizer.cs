@@ -184,23 +184,18 @@ public class TurtleVisualizer : MonoBehaviour
         // Enable transparency for HDRP
         if (mat.HasProperty("_SurfaceType"))
         {
+            // HDRP transparency settings
             mat.SetFloat("_SurfaceType", 1); // Transparent
             mat.SetFloat("_BlendMode", 0); // Alpha blend
             mat.SetFloat("_AlphaCutoffEnable", 0);
+            mat.SetFloat("_ZWrite", 0);
 
-            // CRITICAL FOR VISIBILITY: Enable double-sided rendering
-            if (mat.HasProperty("_DoubleSidedEnable"))
-            {
-                mat.SetFloat("_DoubleSidedEnable", 1);
-            }
-            if (mat.HasProperty("_CullMode"))
-            {
-                mat.SetFloat("_CullMode", 0); // Off (show both sides)
-            }
-
-            // Enable keywords
+            // Enable keywords for transparency
             mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
             mat.EnableKeyword("_BLENDMODE_ALPHA");
+
+            // CRITICAL: Render queue must be 3000+ for HDRP transparent objects
+            mat.renderQueue = 3000;
         }
         else
         {
@@ -209,7 +204,6 @@ public class TurtleVisualizer : MonoBehaviour
             mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
             mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
             mat.SetInt("_ZWrite", 0);
-            mat.SetInt("_Cull", 0); // Disable culling for visibility
             mat.DisableKeyword("_ALPHATEST_ON");
             mat.EnableKeyword("_ALPHABLEND_ON");
             mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
