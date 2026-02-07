@@ -958,20 +958,23 @@ public class TurtleWorldManager : MonoBehaviour
     /// <summary>
     /// Calculates loading priority for a chunk
     /// Priority factors:
-    /// 1. Distance from camera (closer = higher)
+    /// 1. Distance from camera (closer = MUCH higher priority)
     /// 2. Alignment with movement direction (in front = higher)
-    /// 3. Currently visible in frustum (visible = higher)
+    /// 3. Currently visible in frustum (visible = moderate boost)
     /// </summary>
     private float CalculateChunkPriority(Vector2Int chunkCoord, Vector2Int cameraChunk, Vector3 cameraPos, Vector3 movementDir)
     {
         float priority = 100f; // Base priority
 
-        // Factor 1: Distance (closer chunks are more important)
+        // Factor 1: Distance (MUCH stronger priority for close chunks)
         float distance = Vector2Int.Distance(chunkCoord, cameraChunk);
-        float distancePriority = Mathf.Max(0, 50f - distance * 5f); // Decreases with distance
+
+        // Exponential falloff for distance - very close chunks get MUCH higher priority
+        // Distance 0: +500, Distance 1: +250, Distance 2: +125, Distance 3: +62.5, etc.
+        float distancePriority = 500f / (distance + 1f);
         priority += distancePriority;
 
-        // Factor 2: Movement direction alignment
+        // Factor 2: Movement direction alignment (reduced from 75 to 30)
         if (useMovementPrioritization && movementDir != Vector3.zero)
         {
             // Get direction from camera to chunk center
@@ -987,19 +990,20 @@ public class TurtleWorldManager : MonoBehaviour
                 // Dot product: 1 = same direction, -1 = opposite direction
                 float alignment = Vector3.Dot(toChunkFlat, movementFlat);
 
-                // Boost priority for chunks in movement direction
-                float movementPriority = alignment * 75f; // -75 to +75
+                // Moderate boost for chunks in movement direction (reduced from 75 to 30)
+                float movementPriority = alignment * 30f; // -30 to +30
                 priority += movementPriority;
 
-                // Extra boost for chunks directly ahead
+                // Extra boost for chunks directly ahead (reduced from 50 to 20)
                 if (alignment > 0.8f) // Within ~36 degrees
                 {
-                    priority += 50f; // Extra priority for straight ahead
+                    priority += 20f; // Extra priority for straight ahead
                 }
             }
         }
 
-        // Factor 3: Frustum visibility (visible chunks get boost)
+        // Factor 3: Frustum visibility (REDUCED from +100 to +50)
+        // Visible chunks get boost, but not so much that they override distance
         if (useFrustumBasedLoading && _cam != null)
         {
             Bounds chunkBounds = GetChunkBounds(chunkCoord);
@@ -1007,7 +1011,7 @@ public class TurtleWorldManager : MonoBehaviour
 
             if (GeometryUtility.TestPlanesAABB(frustumPlanes, chunkBounds))
             {
-                priority += 100f; // Significant boost for visible chunks
+                priority += 50f; // Moderate boost for visible chunks (was 100)
             }
         }
 
