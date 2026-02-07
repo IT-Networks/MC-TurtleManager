@@ -226,6 +226,38 @@ public class StructureEditorManager : MonoBehaviour
     private Vector3Int? GetGridPositionUnderMouse()
     {
         Ray ray = editorCamera.ScreenPointToRay(Input.mousePosition);
+
+        // IMPROVED: First try raycasting against existing blocks for better stacking
+        RaycastHit hit;
+        if (Physics.Raycast(ray, out hit, 1000f))
+        {
+            // Use hit normal to determine which face was hit
+            // Place block adjacent to the hit face in placement mode
+            // For deletion mode, use the hit block's position
+            Vector3 point;
+
+            if (isPlacementMode)
+            {
+                // Place on the surface the mouse is pointing at
+                point = hit.point + hit.normal * (gridSpacing * 0.5f);
+            }
+            else
+            {
+                // Delete the block we're pointing at
+                point = hit.point - hit.normal * (gridSpacing * 0.5f);
+            }
+
+            int x = Mathf.RoundToInt(point.x / gridSpacing);
+            int y = Mathf.RoundToInt(point.y / gridSpacing);
+            int z = Mathf.RoundToInt(point.z / gridSpacing);
+
+            if (Mathf.Abs(x) <= gridSize && Mathf.Abs(y) <= gridSize && Mathf.Abs(z) <= gridSize)
+            {
+                return new Vector3Int(x, y, z);
+            }
+        }
+
+        // Fallback: Raycast against ground plane (Y=0) only when no blocks hit
         Plane gridPlane = new Plane(Vector3.up, Vector3.zero);
         float distance;
 
@@ -235,27 +267,11 @@ public class StructureEditorManager : MonoBehaviour
 
             // Snap to grid
             int x = Mathf.RoundToInt(point.x / gridSpacing);
-            int y = Mathf.RoundToInt(point.y / gridSpacing);
+            int y = 0; // Always place at Y=0 when using ground plane
             int z = Mathf.RoundToInt(point.z / gridSpacing);
 
             // Clamp to grid bounds
-            if (Mathf.Abs(x) <= gridSize && Mathf.Abs(y) <= gridSize && Mathf.Abs(z) <= gridSize)
-            {
-                return new Vector3Int(x, y, z);
-            }
-        }
-
-        // Also try raycasting against existing blocks
-        RaycastHit hit;
-        if (Physics.Raycast(ray, out hit, 1000f))
-        {
-            Vector3 point = hit.point + hit.normal * (gridSpacing * 0.5f);
-
-            int x = Mathf.RoundToInt(point.x / gridSpacing);
-            int y = Mathf.RoundToInt(point.y / gridSpacing);
-            int z = Mathf.RoundToInt(point.z / gridSpacing);
-
-            if (Mathf.Abs(x) <= gridSize && Mathf.Abs(y) <= gridSize && Mathf.Abs(z) <= gridSize)
+            if (Mathf.Abs(x) <= gridSize && Mathf.Abs(z) <= gridSize)
             {
                 return new Vector3Int(x, y, z);
             }
@@ -330,18 +346,69 @@ public class StructureEditorManager : MonoBehaviour
 
     private GameObject CreateBlockObject(Vector3 position, string blockType)
     {
+        // Check if this is a special block type (cross-shaped plants, chains, etc.)
+        BlockRenderType renderType = GetBlockRenderType(blockType);
+
+        GameObject blockObj;
+
+        switch (renderType)
+        {
+            case BlockRenderType.CrossPlant:
+                blockObj = CreateCrossPlantMesh(position, blockType);
+                break;
+
+            case BlockRenderType.Chain:
+                blockObj = CreateChainMesh(position, blockType);
+                break;
+
+            default:
+                blockObj = CreateStandardCubeMesh(position, blockType);
+                break;
+        }
+
+        blockObj.transform.SetParent(gridContainer);
+        return blockObj;
+    }
+
+    private GameObject CreateStandardCubeMesh(Vector3 position, string blockType)
+    {
         GameObject blockObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
         blockObj.transform.position = position;
         blockObj.transform.localScale = Vector3.one * gridSpacing * 0.98f;
-        blockObj.transform.SetParent(gridContainer);
 
-        // TODO: Load actual block textures based on blockType
+        // Load actual block textures from TurtleWorldManager
         Renderer renderer = blockObj.GetComponent<Renderer>();
-        if (renderer != null && blockPreviewMaterial != null)
+        if (renderer != null)
         {
-            renderer.material = new Material(blockPreviewMaterial);
-            // Set color based on block type for now
-            renderer.material.color = GetBlockColor(blockType);
+            TurtleWorldManager worldManager = FindFirstObjectByType<TurtleWorldManager>();
+            if (worldManager != null)
+            {
+                // Use the world manager's material loading system
+                Material blockMaterial = worldManager.GetMaterialForBlock(blockType);
+                if (blockMaterial != null)
+                {
+                    renderer.material = blockMaterial;
+                }
+                else
+                {
+                    // Fallback to simple color
+                    renderer.material = new Material(Shader.Find("Standard"));
+                    renderer.material.color = GetBlockColor(blockType);
+                }
+            }
+            else
+            {
+                // Fallback when no world manager
+                renderer.material = new Material(Shader.Find("Standard"));
+                renderer.material.color = GetBlockColor(blockType);
+            }
+        }
+
+        // Ensure the block has a MeshCollider for raycasting
+        MeshCollider collider = blockObj.GetComponent<MeshCollider>();
+        if (collider != null)
+        {
+            collider.convex = false;
         }
 
         return blockObj;
@@ -377,12 +444,273 @@ public class StructureEditorManager : MonoBehaviour
         previewBlockObject.SetActive(false);
     }
 
+    /// <summary>
+    /// Block render types for different block geometries
+    /// </summary>
+    private enum BlockRenderType
+    {
+        Standard,      // Normal cube blocks
+        CrossPlant,    // Cross-shaped plants (flowers, grass, saplings)
+        Chain,         // Chains (vertical or horizontal)
+        TintedCross    // Tinted cross (colored grass, ferns)
+    }
+
+    /// <summary>
+    /// Determines the render type based on block name
+    /// Based on Minecraft 1.21 block models
+    /// </summary>
+    private BlockRenderType GetBlockRenderType(string blockType)
+    {
+        string lower = blockType.ToLowerInvariant();
+
+        // Cross-shaped plants (use block/cross.json model)
+        // Common flowers
+        if (lower.Contains("poppy") || lower.Contains("dandelion") ||
+            lower.Contains("orchid") || lower.Contains("allium") ||
+            lower.Contains("tulip") || lower.Contains("daisy") ||
+            lower.Contains("cornflower") || lower.Contains("lily_of_the_valley") ||
+            lower.Contains("wither_rose") || lower.Contains("torchflower"))
+        {
+            return BlockRenderType.CrossPlant;
+        }
+
+        // Saplings
+        if (lower.Contains("sapling"))
+        {
+            return BlockRenderType.CrossPlant;
+        }
+
+        // Grass and ferns (tinted cross)
+        if ((lower.Contains("tall_grass") || lower.Contains("fern") ||
+             lower.Contains("dead_bush")) && !lower.Contains("block"))
+        {
+            return BlockRenderType.TintedCross;
+        }
+
+        // Wheat, carrots, potatoes, etc. (crops)
+        if (lower.Contains("wheat") || lower.Contains("carrots") ||
+            lower.Contains("potatoes") || lower.Contains("beetroots") ||
+            lower.Contains("nether_wart"))
+        {
+            return BlockRenderType.CrossPlant;
+        }
+
+        // Mushrooms
+        if ((lower.Contains("mushroom") || lower.Contains("fungus")) &&
+            !lower.Contains("block") && !lower.Contains("stem"))
+        {
+            return BlockRenderType.CrossPlant;
+        }
+
+        // Chains from Create mod or vanilla
+        if (lower.Contains("chain"))
+        {
+            return BlockRenderType.Chain;
+        }
+
+        return BlockRenderType.Standard;
+    }
+
+    /// <summary>
+    /// Creates a cross-shaped mesh for plants (flowers, grass, saplings)
+    /// Based on Minecraft's block/cross.json model
+    /// </summary>
+    private GameObject CreateCrossPlantMesh(Vector3 position, string blockType)
+    {
+        GameObject plantObj = new GameObject($"Plant_{blockType}");
+        plantObj.transform.position = position;
+
+        // Create mesh for cross-shaped plant
+        MeshFilter meshFilter = plantObj.AddComponent<MeshFilter>();
+        MeshRenderer meshRenderer = plantObj.AddComponent<MeshRenderer>();
+
+        Mesh mesh = new Mesh();
+        mesh.name = "CrossPlantMesh";
+
+        // Cross consists of 2 perpendicular quads
+        // Each quad goes from corner to corner diagonally
+        float size = gridSpacing * 0.9f;
+        float halfSize = size * 0.5f;
+        float sqrt2 = Mathf.Sqrt(2f);
+        float diagonalHalf = halfSize * sqrt2;
+
+        List<Vector3> vertices = new List<Vector3>();
+        List<int> triangles = new List<int>();
+        List<Vector2> uvs = new List<Vector2>();
+
+        // First diagonal (from -X-Z to +X+Z) - 2 sided
+        // Front face
+        vertices.Add(new Vector3(-diagonalHalf, 0, -diagonalHalf));  // 0
+        vertices.Add(new Vector3(diagonalHalf, 0, diagonalHalf));    // 1
+        vertices.Add(new Vector3(diagonalHalf, size, diagonalHalf)); // 2
+        vertices.Add(new Vector3(-diagonalHalf, size, -diagonalHalf)); // 3
+
+        uvs.Add(new Vector2(0, 0));
+        uvs.Add(new Vector2(1, 0));
+        uvs.Add(new Vector2(1, 1));
+        uvs.Add(new Vector2(0, 1));
+
+        triangles.Add(0); triangles.Add(2); triangles.Add(1);
+        triangles.Add(0); triangles.Add(3); triangles.Add(2);
+
+        // Back face (reversed winding)
+        vertices.Add(new Vector3(-diagonalHalf, 0, -diagonalHalf));  // 4
+        vertices.Add(new Vector3(diagonalHalf, 0, diagonalHalf));    // 5
+        vertices.Add(new Vector3(diagonalHalf, size, diagonalHalf)); // 6
+        vertices.Add(new Vector3(-diagonalHalf, size, -diagonalHalf)); // 7
+
+        uvs.Add(new Vector2(0, 0));
+        uvs.Add(new Vector2(1, 0));
+        uvs.Add(new Vector2(1, 1));
+        uvs.Add(new Vector2(0, 1));
+
+        triangles.Add(4); triangles.Add(5); triangles.Add(6);
+        triangles.Add(4); triangles.Add(6); triangles.Add(7);
+
+        // Second diagonal (from +X-Z to -X+Z) - 2 sided
+        // Front face
+        vertices.Add(new Vector3(diagonalHalf, 0, -diagonalHalf));   // 8
+        vertices.Add(new Vector3(-diagonalHalf, 0, diagonalHalf));   // 9
+        vertices.Add(new Vector3(-diagonalHalf, size, diagonalHalf)); // 10
+        vertices.Add(new Vector3(diagonalHalf, size, -diagonalHalf)); // 11
+
+        uvs.Add(new Vector2(0, 0));
+        uvs.Add(new Vector2(1, 0));
+        uvs.Add(new Vector2(1, 1));
+        uvs.Add(new Vector2(0, 1));
+
+        triangles.Add(8); triangles.Add(10); triangles.Add(9);
+        triangles.Add(8); triangles.Add(11); triangles.Add(10);
+
+        // Back face (reversed winding)
+        vertices.Add(new Vector3(diagonalHalf, 0, -diagonalHalf));   // 12
+        vertices.Add(new Vector3(-diagonalHalf, 0, diagonalHalf));   // 13
+        vertices.Add(new Vector3(-diagonalHalf, size, diagonalHalf)); // 14
+        vertices.Add(new Vector3(diagonalHalf, size, -diagonalHalf)); // 15
+
+        uvs.Add(new Vector2(0, 0));
+        uvs.Add(new Vector2(1, 0));
+        uvs.Add(new Vector2(1, 1));
+        uvs.Add(new Vector2(0, 1));
+
+        triangles.Add(12); triangles.Add(13); triangles.Add(14);
+        triangles.Add(12); triangles.Add(14); triangles.Add(15);
+
+        mesh.vertices = vertices.ToArray();
+        mesh.triangles = triangles.ToArray();
+        mesh.uv = uvs.ToArray();
+        mesh.RecalculateNormals();
+        mesh.RecalculateBounds();
+
+        meshFilter.mesh = mesh;
+
+        // Apply material with texture
+        TurtleWorldManager worldManager = FindFirstObjectByType<TurtleWorldManager>();
+        if (worldManager != null)
+        {
+            Material blockMaterial = worldManager.GetMaterialForBlock(blockType);
+            if (blockMaterial != null)
+            {
+                // Create transparent version for plants
+                Material plantMaterial = new Material(blockMaterial);
+                plantMaterial.SetFloat("_Mode", 1); // Cutout mode for transparency
+                plantMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.One);
+                plantMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.Zero);
+                plantMaterial.SetInt("_ZWrite", 1);
+                plantMaterial.EnableKeyword("_ALPHATEST_ON");
+                plantMaterial.DisableKeyword("_ALPHABLEND_ON");
+                plantMaterial.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+                plantMaterial.renderQueue = 2450;
+
+                meshRenderer.material = plantMaterial;
+            }
+            else
+            {
+                meshRenderer.material = CreateFallbackPlantMaterial(blockType);
+            }
+        }
+        else
+        {
+            meshRenderer.material = CreateFallbackPlantMaterial(blockType);
+        }
+
+        // Add box collider for raycasting (smaller than visual)
+        BoxCollider collider = plantObj.AddComponent<BoxCollider>();
+        collider.size = new Vector3(size * 0.5f, size, size * 0.5f);
+        collider.center = new Vector3(0, size * 0.5f, 0);
+
+        return plantObj;
+    }
+
+    /// <summary>
+    /// Creates a chain mesh (simplified vertical chain)
+    /// </summary>
+    private GameObject CreateChainMesh(Vector3 position, string blockType)
+    {
+        // For now, use a thin vertical cylinder for chains
+        GameObject chainObj = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        chainObj.transform.position = position;
+        chainObj.transform.localScale = new Vector3(0.1f, gridSpacing * 0.5f, 0.1f);
+
+        Renderer renderer = chainObj.GetComponent<Renderer>();
+        if (renderer != null)
+        {
+            Material chainMaterial = new Material(Shader.Find("Standard"));
+            chainMaterial.color = new Color(0.3f, 0.3f, 0.3f); // Dark gray for chains
+            chainMaterial.SetFloat("_Metallic", 0.8f);
+            renderer.material = chainMaterial;
+        }
+
+        return chainObj;
+    }
+
+    /// <summary>
+    /// Creates a fallback plant material when textures are not available
+    /// </summary>
+    private Material CreateFallbackPlantMaterial(string blockType)
+    {
+        Material mat = new Material(Shader.Find("Standard"));
+        mat.color = GetPlantColor(blockType);
+
+        // Enable alpha cutout for transparency
+        mat.SetFloat("_Mode", 1);
+        mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.One);
+        mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.Zero);
+        mat.SetInt("_ZWrite", 1);
+        mat.EnableKeyword("_ALPHATEST_ON");
+        mat.DisableKeyword("_ALPHABLEND_ON");
+        mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+        mat.renderQueue = 2450;
+
+        return mat;
+    }
+
+    /// <summary>
+    /// Gets appropriate color for plant types
+    /// </summary>
+    private Color GetPlantColor(string blockType)
+    {
+        string lower = blockType.ToLowerInvariant();
+
+        if (lower.Contains("poppy")) return new Color(0.8f, 0.1f, 0.1f);
+        if (lower.Contains("dandelion")) return new Color(1f, 0.9f, 0.2f);
+        if (lower.Contains("orchid")) return new Color(0.6f, 0.4f, 0.8f);
+        if (lower.Contains("allium")) return new Color(0.7f, 0.3f, 0.7f);
+        if (lower.Contains("tulip")) return new Color(0.9f, 0.5f, 0.4f);
+        if (lower.Contains("grass") || lower.Contains("fern")) return new Color(0.3f, 0.7f, 0.3f);
+        if (lower.Contains("sapling")) return new Color(0.4f, 0.6f, 0.2f);
+        if (lower.Contains("mushroom") && lower.Contains("red")) return new Color(0.8f, 0.2f, 0.2f);
+        if (lower.Contains("mushroom") && lower.Contains("brown")) return new Color(0.6f, 0.4f, 0.3f);
+
+        return new Color(0.4f, 0.7f, 0.3f); // Default green for plants
+    }
+
     private Color GetBlockColor(string blockType)
     {
         // Simple color mapping for common blocks
         if (blockType.Contains("stone")) return new Color(0.5f, 0.5f, 0.5f);
         if (blockType.Contains("dirt")) return new Color(0.6f, 0.4f, 0.2f);
-        if (blockType.Contains("grass")) return new Color(0.3f, 0.7f, 0.3f);
+        if (blockType.Contains("grass") && blockType.Contains("block")) return new Color(0.3f, 0.7f, 0.3f);
         if (blockType.Contains("wood")) return new Color(0.6f, 0.4f, 0.2f);
         if (blockType.Contains("cobblestone")) return new Color(0.4f, 0.4f, 0.4f);
         if (blockType.Contains("planks")) return new Color(0.7f, 0.5f, 0.3f);

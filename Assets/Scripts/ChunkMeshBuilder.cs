@@ -48,9 +48,23 @@ public class ChunkMeshBuilder
                     float wz = data.coord.y * data.chunkSize + z;
                     blockPositions.Add((new Vector3(wx, y - 128, wz), blockName));
 
-                    // Check adjacent blocks for face culling
-                    bool[] visibleFaces = GetVisibleFaces(data, x, y, z);
-                    AddCubeFaces(sb, worldPos, visibleFaces, blockName);
+                    // ENHANCED: Check if this block needs special rendering (cross-shaped plants, chains, etc.)
+                    if (IsCrossPlantBlock(blockName))
+                    {
+                        // Add cross-shaped mesh for plants
+                        AddCrossPlantMesh(sb, worldPos, blockName);
+                    }
+                    else if (IsChainBlock(blockName))
+                    {
+                        // Add chain mesh (simplified for now)
+                        AddChainMesh(sb, worldPos, blockName);
+                    }
+                    else
+                    {
+                        // Standard cube with face culling
+                        bool[] visibleFaces = GetVisibleFaces(data, x, y, z);
+                        AddCubeFaces(sb, worldPos, visibleFaces, blockName);
+                    }
                 }
             }
         }
@@ -211,6 +225,189 @@ public class ChunkMeshBuilder
 
         mesh.RecalculateNormals();
         mesh.RecalculateBounds();
+    }
+
+    /// <summary>
+    /// Checks if a block should be rendered as a cross-shaped plant
+    /// Based on Minecraft 1.21 block/cross.json and block/tinted_cross.json models
+    /// </summary>
+    private bool IsCrossPlantBlock(string blockName)
+    {
+        string lower = blockName.ToLowerInvariant();
+
+        // Flowers (use block/cross.json)
+        if (lower.Contains("poppy") || lower.Contains("dandelion") ||
+            lower.Contains("orchid") || lower.Contains("allium") ||
+            lower.Contains("tulip") || lower.Contains("daisy") ||
+            lower.Contains("cornflower") || lower.Contains("lily_of_the_valley") ||
+            lower.Contains("wither_rose") || lower.Contains("torchflower") ||
+            lower.Contains("pink_petals"))
+        {
+            return true;
+        }
+
+        // Saplings
+        if (lower.Contains("sapling"))
+        {
+            return true;
+        }
+
+        // Tall grass, ferns, dead bush (use block/tinted_cross.json)
+        if ((lower.Contains("tall_grass") || lower.Contains("fern") ||
+             lower.Contains("dead_bush") || lower.Contains("warped_roots") ||
+             lower.Contains("crimson_roots")) && !lower.Contains("block"))
+        {
+            return true;
+        }
+
+        // Crops
+        if (lower.Contains("wheat") || lower.Contains("carrots") ||
+            lower.Contains("potatoes") || lower.Contains("beetroots") ||
+            lower.Contains("nether_wart") || lower.Contains("sweet_berry"))
+        {
+            return true;
+        }
+
+        // Mushrooms (not mushroom blocks or stems)
+        if ((lower.Contains("mushroom") || lower.Contains("fungus")) &&
+            !lower.Contains("block") && !lower.Contains("stem"))
+        {
+            return true;
+        }
+
+        // Sugar cane, bamboo sapling
+        if (lower.Contains("sugar_cane") || lower.Contains("bamboo_sapling"))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Checks if a block is a chain
+    /// </summary>
+    private bool IsChainBlock(string blockName)
+    {
+        string lower = blockName.ToLowerInvariant();
+        return lower.Contains("chain");
+    }
+
+    /// <summary>
+    /// Adds a cross-shaped plant mesh (two intersecting quads forming an X)
+    /// Based on Minecraft's block/cross.json model
+    /// </summary>
+    private void AddCrossPlantMesh(SubmeshBuild sb, Vector3 center, string blockName)
+    {
+        // Cross mesh: 2 perpendicular quads from corner to corner
+        float sqrt2 = Mathf.Sqrt(2f);
+        float diagonalHalf = 0.5f * sqrt2;
+
+        int startIdx = sb.vertices.Count;
+
+        // First diagonal (from -X-Z to +X+Z)
+        // Front face
+        sb.vertices.Add(center + new Vector3(-diagonalHalf, 0, -diagonalHalf));
+        sb.vertices.Add(center + new Vector3(diagonalHalf, 0, diagonalHalf));
+        sb.vertices.Add(center + new Vector3(diagonalHalf, 1, diagonalHalf));
+        sb.vertices.Add(center + new Vector3(-diagonalHalf, 1, -diagonalHalf));
+
+        sb.uvs.Add(new Vector2(0, 0));
+        sb.uvs.Add(new Vector2(1, 0));
+        sb.uvs.Add(new Vector2(1, 1));
+        sb.uvs.Add(new Vector2(0, 1));
+
+        // Triangles (front face)
+        sb.tris.Add(startIdx + 0); sb.tris.Add(startIdx + 2); sb.tris.Add(startIdx + 1);
+        sb.tris.Add(startIdx + 0); sb.tris.Add(startIdx + 3); sb.tris.Add(startIdx + 2);
+
+        // Back face (same vertices, reversed winding)
+        sb.tris.Add(startIdx + 0); sb.tris.Add(startIdx + 1); sb.tris.Add(startIdx + 2);
+        sb.tris.Add(startIdx + 0); sb.tris.Add(startIdx + 2); sb.tris.Add(startIdx + 3);
+
+        startIdx = sb.vertices.Count;
+
+        // Second diagonal (from +X-Z to -X+Z)
+        // Front face
+        sb.vertices.Add(center + new Vector3(diagonalHalf, 0, -diagonalHalf));
+        sb.vertices.Add(center + new Vector3(-diagonalHalf, 0, diagonalHalf));
+        sb.vertices.Add(center + new Vector3(-diagonalHalf, 1, diagonalHalf));
+        sb.vertices.Add(center + new Vector3(diagonalHalf, 1, -diagonalHalf));
+
+        sb.uvs.Add(new Vector2(0, 0));
+        sb.uvs.Add(new Vector2(1, 0));
+        sb.uvs.Add(new Vector2(1, 1));
+        sb.uvs.Add(new Vector2(0, 1));
+
+        // Triangles (front face)
+        sb.tris.Add(startIdx + 0); sb.tris.Add(startIdx + 2); sb.tris.Add(startIdx + 1);
+        sb.tris.Add(startIdx + 0); sb.tris.Add(startIdx + 3); sb.tris.Add(startIdx + 2);
+
+        // Back face (reversed winding)
+        sb.tris.Add(startIdx + 0); sb.tris.Add(startIdx + 1); sb.tris.Add(startIdx + 2);
+        sb.tris.Add(startIdx + 0); sb.tris.Add(startIdx + 2); sb.tris.Add(startIdx + 3);
+    }
+
+    /// <summary>
+    /// Adds a chain mesh (simplified vertical chain for now)
+    /// TODO: Expand to support horizontal chains and proper chain models
+    /// </summary>
+    private void AddChainMesh(SubmeshBuild sb, Vector3 center, string blockName)
+    {
+        // Simplified chain: thin vertical box
+        float thickness = 0.1f;
+
+        int startIdx = sb.vertices.Count;
+
+        // Create a thin vertical box
+        Vector3[] corners = new Vector3[8]
+        {
+            new Vector3(-thickness, 0f, -thickness),
+            new Vector3( thickness, 0f, -thickness),
+            new Vector3( thickness, 1f, -thickness),
+            new Vector3(-thickness, 1f, -thickness),
+            new Vector3(-thickness, 0f,  thickness),
+            new Vector3( thickness, 0f,  thickness),
+            new Vector3( thickness, 1f,  thickness),
+            new Vector3(-thickness, 1f,  thickness)
+        };
+
+        // Add vertices
+        foreach (var corner in corners)
+        {
+            sb.vertices.Add(center + corner);
+        }
+
+        // Add UVs (simple mapping)
+        for (int i = 0; i < 8; i++)
+        {
+            sb.uvs.Add(new Vector2(0.5f, 0.5f));
+        }
+
+        // Add faces (all 6 faces, no culling for chains)
+        // Front face
+        sb.tris.Add(startIdx + 4); sb.tris.Add(startIdx + 5); sb.tris.Add(startIdx + 6);
+        sb.tris.Add(startIdx + 4); sb.tris.Add(startIdx + 6); sb.tris.Add(startIdx + 7);
+
+        // Back face
+        sb.tris.Add(startIdx + 1); sb.tris.Add(startIdx + 0); sb.tris.Add(startIdx + 3);
+        sb.tris.Add(startIdx + 1); sb.tris.Add(startIdx + 3); sb.tris.Add(startIdx + 2);
+
+        // Top face
+        sb.tris.Add(startIdx + 7); sb.tris.Add(startIdx + 6); sb.tris.Add(startIdx + 2);
+        sb.tris.Add(startIdx + 7); sb.tris.Add(startIdx + 2); sb.tris.Add(startIdx + 3);
+
+        // Bottom face
+        sb.tris.Add(startIdx + 0); sb.tris.Add(startIdx + 1); sb.tris.Add(startIdx + 5);
+        sb.tris.Add(startIdx + 0); sb.tris.Add(startIdx + 5); sb.tris.Add(startIdx + 4);
+
+        // Left face
+        sb.tris.Add(startIdx + 0); sb.tris.Add(startIdx + 4); sb.tris.Add(startIdx + 7);
+        sb.tris.Add(startIdx + 0); sb.tris.Add(startIdx + 7); sb.tris.Add(startIdx + 3);
+
+        // Right face
+        sb.tris.Add(startIdx + 5); sb.tris.Add(startIdx + 1); sb.tris.Add(startIdx + 2);
+        sb.tris.Add(startIdx + 5); sb.tris.Add(startIdx + 2); sb.tris.Add(startIdx + 6);
     }
 }
 
