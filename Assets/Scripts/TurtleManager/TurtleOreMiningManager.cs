@@ -268,21 +268,92 @@ public class TurtleOreMiningManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Mine a single ore block
+    /// Mine a single ore block by sending commands to turtle
     /// </summary>
     private IEnumerator MineSingleOre(Vector3 orePos)
     {
-        if (movementManager != null)
+        if (debugMode) Debug.Log($"[{turtle.turtleName}] Mining ore at {orePos}");
+
+        // Calculate path to ore
+        Vector3 currentPos = turtle.transform.position;
+        List<Vector3> path = CalculatePathToTarget(currentPos, orePos);
+
+        // Send movement commands
+        foreach (Vector3 waypoint in path)
         {
-            // Move to ore position
-            yield return StartCoroutine(movementManager.MoveTo(orePos));
+            Vector3 direction = waypoint - currentPos;
+
+            // Dig if there's a block in the way
+            if (worldManager != null && worldManager.GetBlockTypeAtPosition(waypoint) != "minecraft:air")
+            {
+                // Determine dig direction
+                if (direction.y > 0)
+                    baseManager.QueueCommand("digup");
+                else if (direction.y < 0)
+                    baseManager.QueueCommand("digdown");
+                else
+                    baseManager.QueueCommand("dig");
+
+                yield return new WaitForSeconds(0.5f);
+            }
+
+            // Move in direction
+            if (direction.y > 0)
+                baseManager.QueueCommand("up");
+            else if (direction.y < 0)
+                baseManager.QueueCommand("down");
+            else if (direction.z > 0 || direction.x > 0 || direction.z < 0 || direction.x < 0)
+                baseManager.QueueCommand("forward");
+
+            currentPos = waypoint;
+            yield return new WaitForSeconds(0.3f);
         }
 
-        // Mine the block
-        if (miningManager != null)
+        // Mine the ore block itself
+        baseManager.QueueCommand("dig");
+        yield return new WaitForSeconds(0.5f);
+    }
+
+    /// <summary>
+    /// Calculate simple path from current position to target
+    /// </summary>
+    private List<Vector3> CalculatePathToTarget(Vector3 from, Vector3 to)
+    {
+        List<Vector3> path = new List<Vector3>();
+        Vector3 current = from;
+
+        // Simple path: move Y first, then X, then Z
+        // Move vertically
+        while (current.y != to.y)
         {
-            yield return StartCoroutine(miningManager.MineBlock(orePos));
+            if (current.y < to.y)
+                current += Vector3.up;
+            else
+                current += Vector3.down;
+            path.Add(current);
         }
+
+        // Move along X axis
+        while (current.x != to.x)
+        {
+            if (current.x < to.x)
+                current += Vector3.right;
+            else
+                current += Vector3.left;
+            path.Add(current);
+        }
+
+        // Move along Z axis
+        while (current.z != to.z)
+        {
+            if (current.z < to.z)
+                current += Vector3.forward;
+            else
+                current += Vector3.back;
+            path.Add(current);
+        }
+
+        return path;
     }
 
     /// <summary>
