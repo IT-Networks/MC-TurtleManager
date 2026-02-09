@@ -1,3 +1,6 @@
+-- TurtleSlave.lua - Simple Command Executor
+-- All intelligence is in Unity, this script just executes commands
+
 local SERVER_COMMAND_URL = "http://192.168.178.211:4999/command"
 local SERVER_REPORT_URL  = "http://192.168.178.211:4999/report"
 local SERVER_STATUS_URL  = "http://192.168.178.211:4999/status"
@@ -16,7 +19,7 @@ local validFuelItems = {
     ["minecraft:lava_bucket"] = true,
     ["minecraft:blaze_powder"] = true,
     ["minecraft:coal_block"] = true,
-    -- hier kannst du weitere Brennstoffe hinzufügen
+    ["minecraft:blaze_rod"] = true,
 }
 
 if not table.find then
@@ -28,9 +31,7 @@ if not table.find then
     end
 end
 
-
 function getDirection()
-
     local x1, y1, z1 = gps.locate(2)
     if not x1 then
         print("Fehler: Kein GPS-Signal für initiale Position")
@@ -38,7 +39,6 @@ function getDirection()
         return
     end
 
-    -- Try to move forward
     local moved = turtle.forward()
     if not moved then
         print("Fehler: Richtung konnte nicht bestimmt werden - Turtle blockiert")
@@ -74,10 +74,9 @@ function getPosition()
     local x1, y1, z1 = gps.locate(2)
     if not x1 then print("Kein GPS-Signal"); return end
     pos = { x = x1, y = y1, z = z1 }
-    print("GPS: ", textutils.serialize(pos))
 end
 
--- Inventarstatus erfassen
+-- Get detailed inventory status
 function getInventoryStatus()
     local inventory = {}
     for slot = 1, 16 do
@@ -93,13 +92,22 @@ function getInventoryStatus()
     return inventory
 end
 
--- Aktuell ausgerüstetes Tool (wenn periph.)
+-- Count total inventory slots used
+function countInventorySlotsUsed()
+    local count = 0
+    for slot = 1, 16 do
+        if turtle.getItemCount(slot) > 0 then
+            count = count + 1
+        end
+    end
+    return count
+end
+
 function getEquippedTool()
     local toolLeft = peripheral.getType("left") or "none"
     local toolRight = peripheral.getType("right") or "none"
     return {left = toolLeft, right = toolRight}
 end
-
 
 function reportStatus()
     local status = {
@@ -109,7 +117,7 @@ function reportStatus()
         isBusy = isBusy,
         fuelLevel = turtle.getFuelLevel(),
         maxFuel = turtle.getFuelLimit(),
-        inventorySlotsUsed = #getInventoryStatus(),
+        inventorySlotsUsed = countInventorySlotsUsed(),
         inventorySlotsTotal = 16,
         inventory = getInventoryStatus(),
         equippedToolRight = peripheral.getType("right") or "none",
@@ -118,6 +126,7 @@ function reportStatus()
     local json = textutils.serializeJSON(status)
     http.post(SERVER_STATUS_URL, json, {["Content-Type"] = "application/json"})
 end
+
 function scanEnvironment()
     local scanner = peripheral.find("geoScanner")
     if not scanner then
@@ -143,7 +152,6 @@ function scanEnvironment()
     end
 end
 
-
 function getNextCommand(label)
     local url = SERVER_COMMAND_URL .. "?label=" .. textutils.urlEncode(label)
     local ok, res = pcall(http.get, url)
@@ -158,44 +166,159 @@ function getNextCommand(label)
     return nil
 end
 
--- Refuel function (must be defined before main loop)
-function executeRefuel(cmdData)
-    print("Starte Refuel-Vorgang...")
-    isBusy = true
-    local chest = peripheral.find("minecraft:chest")
-
-    for slot, item in pairs(chest.list()) do
-        if item and validFuelItems[item.name] then
-            chest.pushItems(os.getComputerLabel(), slot, 10)
-        end
+-- Parse commands with parameters (e.g., "select:5", "refuel:10", "drop:3")
+function parseCommand(cmdString)
+    local parts = {}
+    for part in string.gmatch(cmdString, "[^:]+") do
+        table.insert(parts, part)
     end
-    turtle.refuel(64)
-    isBusy = false
+    return parts[1], parts[2]
 end
 
--- Start
+-- Refuel from inventory or chest
+function executeRefuel(amount)
+    print("Starte Refuel-Vorgang...")
+    isBusy = true
+
+    amount = tonumber(amount) or 64
+
+    -- Try to refuel from inventory first
+    for slot = 1, 16 do
+        local detail = turtle.getItemDetail(slot)
+        if detail and validFuelItems[detail.name] then
+            turtle.select(slot)
+            turtle.refuel(amount)
+            print("Refueled mit " .. detail.name)
+            if turtle.getFuelLevel() > 1000 then
+                isBusy = false
+                return true
+            end
+        end
+    end
+
+    -- Try to get fuel from chest below
+    local hasChest, chestData = turtle.inspectDown()
+    if hasChest and chestData.name:find("chest") then
+        turtle.suckDown()
+        -- Try again
+        for slot = 1, 16 do
+            local detail = turtle.getItemDetail(slot)
+            if detail and validFuelItems[detail.name] then
+                turtle.select(slot)
+                turtle.refuel(amount)
+            end
+        end
+    end
+
+    isBusy = false
+    return true
+end
+
+-- Drop items (to chest or ground)
+function executeDrop(slot)
+    isBusy = true
+    slot = tonumber(slot)
+
+    if slot then
+        turtle.select(slot)
+        turtle.drop()
+    else
+        -- Drop all non-fuel items
+        for s = 1, 16 do
+            local detail = turtle.getItemDetail(s)
+            if detail and not validFuelItems[detail.name] then
+                turtle.select(s)
+                turtle.drop()
+            end
+        end
+    end
+
+    isBusy = false
+    return true
+end
+
+-- Drop items down (to chest below)
+function executeDropDown(slot)
+    isBusy = true
+    slot = tonumber(slot)
+
+    if slot then
+        turtle.select(slot)
+        turtle.dropDown()
+    else
+        -- Drop all non-fuel items
+        for s = 1, 16 do
+            local detail = turtle.getItemDetail(s)
+            if detail and not validFuelItems[detail.name] then
+                turtle.select(s)
+                turtle.dropDown()
+            end
+        end
+    end
+
+    isBusy = false
+    return true
+end
+
+-- Select inventory slot
+function executeSelect(slot)
+    slot = tonumber(slot) or 1
+    turtle.select(slot)
+    return true
+end
+
+-- Place block
+function executePlace(direction)
+    if direction == "up" then
+        return turtle.placeUp()
+    elseif direction == "down" then
+        return turtle.placeDown()
+    else
+        return turtle.place()
+    end
+end
+
+-- Suck items from chest
+function executeSuck(direction)
+    if direction == "up" then
+        return turtle.suckUp()
+    elseif direction == "down" then
+        return turtle.suckDown()
+    else
+        return turtle.suck()
+    end
+end
+
+-- ========== MAIN LOOP ==========
+
 print("Initialisiere GPS...")
 getDirection()
 getPosition()
 reportStatus()
-print("Starte Steuerung...")
+print("Starte Turtle Control...")
+print("Waiting for commands from Unity...")
 
 while true do
     local label = os.getComputerLabel()
     local cmdData = getNextCommand(label)
 
     if cmdData then
-        local cmd = cmdData.command
+        local cmdString = cmdData.command
+        local cmd, param = parseCommand(cmdString)
         local result = false
+
+        -- Movement commands
         if cmd == "forward" then result = turtle.forward()
         elseif cmd == "back" then result = turtle.back()
         elseif cmd == "up" then result = turtle.up()
         elseif cmd == "down" then result = turtle.down()
+
+        -- Rotation commands
         elseif cmd == "left" then
             turtle.turnLeft()
             local i = table.find(directionOrder, direction)
             if i then
-                direction = directionOrder[(i - 2) % #directionOrder + 1]  -- links drehen
+                direction = directionOrder[(i - 2) % #directionOrder + 1]
                 result = true
             else
                 print("Warnung: Unbekannte Richtung, versuche Richtung neu zu bestimmen")
@@ -206,34 +329,54 @@ while true do
             turtle.turnRight()
             local i = table.find(directionOrder, direction)
             if i then
-                direction = directionOrder[i % #directionOrder + 1]  -- rechts drehen
+                direction = directionOrder[i % #directionOrder + 1]
                 result = true
             else
                 print("Warnung: Unbekannte Richtung, versuche Richtung neu zu bestimmen")
                 getDirection()
                 result = false
             end
-        elseif cmd == "dig" then
-            result = turtle.dig()
-        elseif cmd == "digdown" then
-            result = turtle.digDown()
-        elseif cmd == "digup" then
-            result = turtle.digUp()
+
+        -- Digging commands
+        elseif cmd == "dig" then result = turtle.dig()
+        elseif cmd == "digdown" then result = turtle.digDown()
+        elseif cmd == "digup" then result = turtle.digUp()
+
+        -- Placing commands
+        elseif cmd == "place" then result = executePlace(param)
+        elseif cmd == "placeup" then result = turtle.placeUp()
+        elseif cmd == "placedown" then result = turtle.placeDown()
+
+        -- Inventory commands
+        elseif cmd == "select" then result = executeSelect(param)
+        elseif cmd == "drop" then result = executeDrop(param)
+        elseif cmd == "dropup" then
+            if param then turtle.select(tonumber(param)) end
+            result = turtle.dropUp()
+        elseif cmd == "dropdown" then result = executeDropDown(param)
+        elseif cmd == "suck" then result = executeSuck(param)
+        elseif cmd == "suckup" then result = turtle.suckUp()
+        elseif cmd == "suckdown" then result = turtle.suckDown()
+
+        -- Utility commands
         elseif cmd == "scan" then scanEnvironment(); result = true
-        elseif cmd == "refuel" then executeRefuel(cmdData); result = true
-        else print("Unbekannter Befehl:", cmd)
+        elseif cmd == "refuel" then result = executeRefuel(param)
+
+        else
+            print("Unbekannter Befehl:", cmdString)
         end
 
         if result then
-            print("Befehl ausgeführt:", cmd)
-            -- Update position only after successful movement commands
+            print("Befehl ausgeführt:", cmdString)
+            -- Update position after successful movement
             if cmd == "forward" or cmd == "back" or cmd == "up" or cmd == "down" then
                 getPosition()
             end
         else
-            print("Fehler bei Befehl:", cmd)
+            print("Fehler bei Befehl:", cmdString)
         end
     end
+
     reportStatus()
     sleep(SLEEP_TIME)
 end

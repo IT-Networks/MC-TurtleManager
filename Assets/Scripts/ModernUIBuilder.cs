@@ -50,6 +50,7 @@ public class ModernUIBuilder : MonoBehaviour
         BuildStructureSelectionPanel();
         BuildContextMenuPanel();
         BuildQuickActionsPanel();
+        BuildAIPromptPanel();
 
         // Setup ModernUIManager references
         SetupModernUIManagerReferences();
@@ -442,6 +443,122 @@ public class ModernUIBuilder : MonoBehaviour
             new Vector2(265, 0), new Vector2(110, 35), new Color(0.8f, 0.2f, 0.2f));
 
         panel.SetActive(true);
+    }
+
+    #endregion
+
+    #region AI Prompt Panel
+
+    private void BuildAIPromptPanel()
+    {
+        GameObject panel = CreatePanel("AIPromptPanel", new Vector2(0, 100), new Vector2(700, 500));
+
+        if (modernUIManager != null)
+            modernUIManager.aiPromptPanel = panel;
+
+        // Add AIPromptPanel component
+        AIPromptPanel aiPanel = panel.AddComponent<AIPromptPanel>();
+        aiPanel.panelRoot = panel;
+
+        // Header
+        aiPanel.headerText = CreateTMPText(panel, "HeaderText", "AI Structure Generator (I)",
+            new Vector2(0, 220), new Vector2(650, 30), 20, TextAlignmentOptions.Center);
+        aiPanel.headerText.fontStyle = FontStyles.Bold;
+
+        // Instructions
+        CreateTMPText(panel, "Instructions", "Describe what you want the turtle to build. The AI will generate a structure design.",
+            new Vector2(0, 185), new Vector2(650, 25), 12, TextAlignmentOptions.Center);
+
+        // Prompt Input Field (Multi-line)
+        GameObject inputContainer = new GameObject("InputContainer");
+        inputContainer.transform.SetParent(panel.transform, false);
+        RectTransform inputRect = inputContainer.AddComponent<RectTransform>();
+        inputRect.anchoredPosition = new Vector2(0, 110);
+        inputRect.sizeDelta = new Vector2(650, 80);
+
+        aiPanel.promptInputField = CreateMultilineTMPInputField(inputContainer, "PromptInput",
+            "Enter your prompt here... (e.g., 'Build a 5x5 house with door and windows')",
+            Vector2.zero, new Vector2(650, 80));
+
+        // Generate Button (Large, prominent)
+        aiPanel.generateButton = CreateButton(panel, "GenerateButton", "🤖 Generate Structure (Enter)",
+            new Vector2(0, 50), new Vector2(300, 40), new Color(0.2f, 0.6f, 0.8f));
+
+        // Status Text
+        aiPanel.statusText = CreateTMPText(panel, "StatusText", "Ready. Enter a prompt and click Generate.",
+            new Vector2(0, 10), new Vector2(650, 25), 13, TextAlignmentOptions.Center);
+        aiPanel.statusText.color = Color.white;
+
+        // Action Buttons Row
+        GameObject actionsContainer = new GameObject("ActionsContainer");
+        actionsContainer.transform.SetParent(panel.transform, false);
+        RectTransform actionsRect = actionsContainer.AddComponent<RectTransform>();
+        actionsRect.anchoredPosition = new Vector2(0, -35);
+        actionsRect.sizeDelta = new Vector2(650, 35);
+
+        aiPanel.buildButton = CreateButton(actionsContainer, "BuildButton", "🔨 Build Now",
+            new Vector2(-180, 0), new Vector2(140, 30), new Color(0.2f, 0.8f, 0.2f));
+        aiPanel.saveButton = CreateButton(actionsContainer, "SaveButton", "💾 Save",
+            new Vector2(-30, 0), new Vector2(100, 30), new Color(0.6f, 0.4f, 0.8f));
+        aiPanel.clearButton = CreateButton(actionsContainer, "ClearButton", "🗑 Clear",
+            new Vector2(80, 0), new Vector2(100, 30), new Color(0.6f, 0.6f, 0.2f));
+        aiPanel.closeButton = CreateButton(actionsContainer, "CloseButton", "✖ Close (I/ESC)",
+            new Vector2(200, 0), new Vector2(140, 30), new Color(0.8f, 0.2f, 0.2f));
+
+        // Settings Row
+        GameObject settingsContainer = new GameObject("SettingsContainer");
+        settingsContainer.transform.SetParent(panel.transform, false);
+        RectTransform settingsRect = settingsContainer.AddComponent<RectTransform>();
+        settingsRect.anchoredPosition = new Vector2(0, -80);
+        settingsRect.sizeDelta = new Vector2(650, 30);
+
+        aiPanel.autoSaveToggle = CreateToggle(settingsContainer, "AutoSaveToggle", "Auto-Save Structures",
+            new Vector2(-180, 0), new Vector2(180, 25));
+        aiPanel.autoBuildToggle = CreateToggle(settingsContainer, "AutoBuildToggle", "Auto-Build After Generation",
+            new Vector2(50, 0), new Vector2(220, 25));
+
+        // Examples Section
+        GameObject examplesPanel = CreatePanel("ExamplesPanel", new Vector2(0, -160), new Vector2(650, 150), panel.transform);
+        examplesPanel.GetComponent<Image>().color = new Color(0.05f, 0.05f, 0.05f, 0.8f);
+
+        CreateTMPText(examplesPanel, "ExamplesHeader", "💡 Example Prompts:",
+            new Vector2(0, 55), new Vector2(630, 20), 13, TextAlignmentOptions.Center);
+
+        aiPanel.examplesText = CreateTMPText(examplesPanel, "ExamplesList",
+            "• Build a 5x5 house with door and windows\n" +
+            "• Create a mechanical workshop with Create mod gears and belts\n" +
+            "• Design a small castle tower with spiral stairs\n" +
+            "• Make a modern concrete building with glass walls\n" +
+            "• Build a storage room with chests and barrels\n" +
+            "• Create a pipe network connecting machines",
+            new Vector2(0, -10), new Vector2(630, 110), 11, TextAlignmentOptions.TopLeft);
+        aiPanel.examplesText.enableWordWrapping = true;
+
+        // Set example prompts
+        aiPanel.SetExamplePrompts();
+
+        panel.SetActive(false);
+    }
+
+    /// <summary>
+    /// Create multiline TMP input field for AI prompts
+    /// </summary>
+    private TMP_InputField CreateMultilineTMPInputField(GameObject parent, string name, string placeholder, Vector2 anchoredPosition, Vector2 sizeDelta)
+    {
+        TMP_InputField field = CreateTMPInputField(parent, name, placeholder, anchoredPosition, sizeDelta);
+
+        // Configure for multiline
+        field.lineType = TMP_InputField.LineType.MultiLineNewline;
+        field.textComponent.enableWordWrapping = true;
+        field.textComponent.overflowMode = TextOverflowModes.Overflow;
+
+        // Add scrolling for long text
+        ScrollRect scroll = field.gameObject.AddComponent<ScrollRect>();
+        scroll.vertical = true;
+        scroll.horizontal = false;
+        scroll.movementType = ScrollRect.MovementType.Clamped;
+
+        return field;
     }
 
     #endregion
