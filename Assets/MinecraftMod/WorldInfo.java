@@ -43,7 +43,7 @@ public class WorldInfo {
     private static MinecraftServer server;
     private HttpServer httpServer;
     private ScheduledExecutorService autoSaveExecutor;
-    
+
     // Store chunk update timestamps: Map<Dimension, Map<ChunkPos, Timestamp>>
     private final Map<ResourceLocation, Map<Long, Long>> chunkUpdateTimestamps = new ConcurrentHashMap<>();
     private final Object saveLock = new Object();
@@ -51,7 +51,208 @@ public class WorldInfo {
     private Path dataDirectory;
     private static final String TIMESTAMPS_FILE = "chunk_timestamps.json";
     private static final long SAVE_INTERVAL_MINUTES = 1;
-    
+
+    // Cached JSON responses for blocks and buildables (performance optimization)
+    private static String cachedBlocksJson = null;
+    private static String cachedBuildablesJson = null;
+    private static String cachedBlockCategoriesJson = null;
+
+    // ===== BLOCK LIBRARY - Central Source of Truth =====
+    // This replaces hardcoded lists in Lua scripts and Unity
+    private static final Map<String, List<String>> BLOCK_CATEGORIES = initializeBlockCategories();
+
+    private static Map<String, List<String>> initializeBlockCategories() {
+        Map<String, List<String>> categories = new LinkedHashMap<>();
+
+        // === BASIC BUILDING MATERIALS ===
+        categories.put("Stone & Bricks", Arrays.asList(
+            "minecraft:stone", "minecraft:cobblestone", "minecraft:stone_bricks",
+            "minecraft:mossy_stone_bricks", "minecraft:cracked_stone_bricks", "minecraft:chiseled_stone_bricks",
+            "minecraft:smooth_stone", "minecraft:andesite", "minecraft:polished_andesite",
+            "minecraft:diorite", "minecraft:polished_diorite", "minecraft:granite", "minecraft:polished_granite",
+            "minecraft:deepslate", "minecraft:deepslate_bricks", "minecraft:cracked_deepslate_bricks",
+            "minecraft:deepslate_tiles", "minecraft:cracked_deepslate_tiles"
+        ));
+
+        categories.put("Wood & Planks", Arrays.asList(
+            "minecraft:oak_planks", "minecraft:oak_log", "minecraft:stripped_oak_log",
+            "minecraft:spruce_planks", "minecraft:spruce_log", "minecraft:stripped_spruce_log",
+            "minecraft:birch_planks", "minecraft:birch_log", "minecraft:stripped_birch_log",
+            "minecraft:jungle_planks", "minecraft:jungle_log", "minecraft:stripped_jungle_log",
+            "minecraft:acacia_planks", "minecraft:acacia_log", "minecraft:stripped_acacia_log",
+            "minecraft:dark_oak_planks", "minecraft:dark_oak_log", "minecraft:stripped_dark_oak_log",
+            "minecraft:mangrove_planks", "minecraft:mangrove_log", "minecraft:stripped_mangrove_log",
+            "minecraft:cherry_planks", "minecraft:cherry_log", "minecraft:stripped_cherry_log",
+            "minecraft:crimson_planks", "minecraft:crimson_stem", "minecraft:stripped_crimson_stem",
+            "minecraft:warped_planks", "minecraft:warped_stem", "minecraft:stripped_warped_stem"
+        ));
+
+        categories.put("Glass & Transparent", Arrays.asList(
+            "minecraft:glass", "minecraft:white_stained_glass", "minecraft:light_gray_stained_glass",
+            "minecraft:gray_stained_glass", "minecraft:black_stained_glass", "minecraft:brown_stained_glass",
+            "minecraft:red_stained_glass", "minecraft:orange_stained_glass", "minecraft:yellow_stained_glass",
+            "minecraft:lime_stained_glass", "minecraft:green_stained_glass", "minecraft:cyan_stained_glass",
+            "minecraft:light_blue_stained_glass", "minecraft:blue_stained_glass", "minecraft:purple_stained_glass",
+            "minecraft:magenta_stained_glass", "minecraft:pink_stained_glass", "minecraft:glass_pane", "minecraft:iron_bars"
+        ));
+
+        categories.put("Concrete & Terracotta", Arrays.asList(
+            "minecraft:white_concrete", "minecraft:light_gray_concrete", "minecraft:gray_concrete",
+            "minecraft:black_concrete", "minecraft:brown_concrete", "minecraft:red_concrete",
+            "minecraft:orange_concrete", "minecraft:yellow_concrete", "minecraft:lime_concrete",
+            "minecraft:green_concrete", "minecraft:cyan_concrete", "minecraft:light_blue_concrete",
+            "minecraft:blue_concrete", "minecraft:purple_concrete", "minecraft:magenta_concrete",
+            "minecraft:pink_concrete", "minecraft:white_terracotta", "minecraft:terracotta"
+        ));
+
+        categories.put("Wool & Carpet", Arrays.asList(
+            "minecraft:white_wool", "minecraft:light_gray_wool", "minecraft:gray_wool",
+            "minecraft:black_wool", "minecraft:brown_wool", "minecraft:red_wool",
+            "minecraft:orange_wool", "minecraft:yellow_wool", "minecraft:lime_wool",
+            "minecraft:green_wool", "minecraft:cyan_wool", "minecraft:light_blue_wool",
+            "minecraft:blue_wool", "minecraft:purple_wool", "minecraft:magenta_wool", "minecraft:pink_wool"
+        ));
+
+        // === DECORATIVE BLOCKS ===
+        categories.put("Slabs", Arrays.asList(
+            "minecraft:stone_slab", "minecraft:stone_brick_slab", "minecraft:oak_slab", "minecraft:spruce_slab",
+            "minecraft:birch_slab", "minecraft:jungle_slab", "minecraft:acacia_slab", "minecraft:dark_oak_slab",
+            "minecraft:smooth_stone_slab", "minecraft:andesite_slab", "minecraft:diorite_slab", "minecraft:granite_slab"
+        ));
+
+        categories.put("Stairs", Arrays.asList(
+            "minecraft:stone_stairs", "minecraft:stone_brick_stairs", "minecraft:oak_stairs", "minecraft:spruce_stairs",
+            "minecraft:birch_stairs", "minecraft:jungle_stairs", "minecraft:acacia_stairs", "minecraft:dark_oak_stairs",
+            "minecraft:andesite_stairs", "minecraft:diorite_stairs", "minecraft:granite_stairs"
+        ));
+
+        categories.put("Fences & Walls", Arrays.asList(
+            "minecraft:oak_fence", "minecraft:spruce_fence", "minecraft:birch_fence", "minecraft:jungle_fence",
+            "minecraft:acacia_fence", "minecraft:dark_oak_fence", "minecraft:nether_brick_fence",
+            "minecraft:cobblestone_wall", "minecraft:mossy_cobblestone_wall", "minecraft:stone_brick_wall",
+            "minecraft:andesite_wall", "minecraft:diorite_wall", "minecraft:granite_wall"
+        ));
+
+        categories.put("Doors & Gates", Arrays.asList(
+            "minecraft:oak_door", "minecraft:spruce_door", "minecraft:birch_door", "minecraft:jungle_door",
+            "minecraft:acacia_door", "minecraft:dark_oak_door", "minecraft:iron_door",
+            "minecraft:oak_fence_gate", "minecraft:spruce_fence_gate", "minecraft:birch_fence_gate",
+            "minecraft:jungle_fence_gate", "minecraft:acacia_fence_gate", "minecraft:dark_oak_fence_gate",
+            "minecraft:oak_trapdoor", "minecraft:spruce_trapdoor", "minecraft:birch_trapdoor", "minecraft:iron_trapdoor"
+        ));
+
+        // === FUNCTIONAL BLOCKS ===
+        categories.put("Storage & Crafting", Arrays.asList(
+            "minecraft:chest", "minecraft:barrel", "minecraft:crafting_table", "minecraft:furnace",
+            "minecraft:smoker", "minecraft:blast_furnace", "minecraft:anvil", "minecraft:enchanting_table",
+            "minecraft:bookshelf", "minecraft:lectern", "minecraft:ladder", "minecraft:bed"
+        ));
+
+        categories.put("Lighting", Arrays.asList(
+            "minecraft:torch", "minecraft:soul_torch", "minecraft:lantern", "minecraft:soul_lantern",
+            "minecraft:glowstone", "minecraft:sea_lantern", "minecraft:redstone_lamp",
+            "minecraft:shroomlight", "minecraft:end_rod"
+        ));
+
+        // === CREATE MOD - MECHANICAL COMPONENTS ===
+        categories.put("Create: Kinetic Power", Arrays.asList(
+            "create:cogwheel", "create:large_cogwheel", "create:shaft", "create:gearbox",
+            "create:gearshift", "create:clutch", "create:encased_chain_drive",
+            "create:adjustable_chain_gearshift", "create:rotation_speed_controller"
+        ));
+
+        categories.put("Create: Generators & Motors", Arrays.asList(
+            "create:water_wheel", "create:windmill_bearing", "create:mechanical_bearing",
+            "create:steam_engine", "create:motor", "create:creative_motor"
+        ));
+
+        categories.put("Create: Logistics", Arrays.asList(
+            "create:mechanical_arm", "create:deployer", "create:mechanical_drill", "create:mechanical_saw",
+            "create:mechanical_harvester", "create:mechanical_plough", "create:portable_storage_interface",
+            "create:andesite_funnel", "create:brass_funnel", "create:andesite_tunnel", "create:brass_tunnel"
+        ));
+
+        categories.put("Create: Conveyor Belts", Arrays.asList(
+            "create:belt_connector", "create:mechanical_belt", "create:belt_support"
+        ));
+
+        categories.put("Create: Processing", Arrays.asList(
+            "create:millstone", "create:crushing_wheel", "create:mechanical_press",
+            "create:mechanical_mixer", "create:blaze_burner", "create:basin",
+            "create:item_drain", "create:spout", "create:encased_fan"
+        ));
+
+        categories.put("Create: Storage & Containers", Arrays.asList(
+            "create:item_vault", "create:fluid_tank", "create:creative_fluid_tank",
+            "create:hose_pulley", "create:chute", "create:smart_chute"
+        ));
+
+        // === ATM10 MODS - PIPES & CABLES ===
+        categories.put("Pipez: Item Transport", Arrays.asList(
+            "pipez:item_pipe", "pipez:gas_pipe", "pipez:fluid_pipe",
+            "pipez:energy_pipe", "pipez:universal_pipe"
+        ));
+
+        categories.put("Mekanism: Logistics", Arrays.asList(
+            "mekanism:logistical_transporter", "mekanism:mechanical_pipe",
+            "mekanism:pressurized_tube", "mekanism:universal_cable", "mekanism:thermodynamic_conductor"
+        ));
+
+        categories.put("Thermal: Ducts", Arrays.asList(
+            "thermal:fluid_duct", "thermal:energy_duct", "thermal:item_duct"
+        ));
+
+        return categories;
+    }
+
+    // Get all blocks as flat list (performance-optimized with lazy caching)
+    private static List<String> getAllBlocks() {
+        List<String> allBlocks = new ArrayList<>();
+        for (List<String> categoryBlocks : BLOCK_CATEGORIES.values()) {
+            allBlocks.addAll(categoryBlocks);
+        }
+        return allBlocks;
+    }
+
+    // Get buildable structures/components metadata
+    private static Map<String, Object> getBuildables() {
+        Map<String, Object> buildables = new LinkedHashMap<>();
+
+        // Functional buildables
+        List<Map<String, String>> functionalBuildables = new ArrayList<>();
+        functionalBuildables.add(createBuildable("Chest Storage", "minecraft:chest", "Storage unit for items"));
+        functionalBuildables.add(createBuildable("Furnace", "minecraft:furnace", "Smelting and cooking"));
+        functionalBuildables.add(createBuildable("Crafting Table", "minecraft:crafting_table", "3x3 crafting grid"));
+        functionalBuildables.add(createBuildable("Enchanting Table", "minecraft:enchanting_table", "Enchant items"));
+        buildables.put("functional", functionalBuildables);
+
+        // Create Mod buildables
+        List<Map<String, String>> createBuildables = new ArrayList<>();
+        createBuildables.add(createBuildable("Water Wheel Generator", "create:water_wheel", "Generates rotational power from water"));
+        createBuildables.add(createBuildable("Windmill", "create:windmill_bearing", "Generates power from wind"));
+        createBuildables.add(createBuildable("Mechanical Press", "create:mechanical_press", "Processes items"));
+        createBuildables.add(createBuildable("Mechanical Mixer", "create:mechanical_mixer", "Mixes ingredients"));
+        createBuildables.add(createBuildable("Crushing Wheel", "create:crushing_wheel", "Crushes ores and items"));
+        createBuildables.add(createBuildable("Item Vault", "create:item_vault", "Large storage container"));
+        buildables.put("create_mod", createBuildables);
+
+        // Mekanism buildables
+        List<Map<String, String>> mekanismBuildables = new ArrayList<>();
+        mekanismBuildables.add(createBuildable("Logistical Transporter", "mekanism:logistical_transporter", "Item transport pipe"));
+        mekanismBuildables.add(createBuildable("Mechanical Pipe", "mekanism:mechanical_pipe", "Fluid transport"));
+        mekanismBuildables.add(createBuildable("Universal Cable", "mekanism:universal_cable", "Energy transfer"));
+        buildables.put("mekanism", mekanismBuildables);
+
+        return buildables;
+    }
+
+    private static Map<String, String> createBuildable(String name, String blockId, String description) {
+        Map<String, String> buildable = new LinkedHashMap<>();
+        buildable.put("name", name);
+        buildable.put("blockId", blockId);
+        buildable.put("description", description);
+        return buildable;
+    }
 
     public WorldInfo() {
         IEventBus bus = net.neoforged.neoforge.common.NeoForge.EVENT_BUS;
@@ -200,10 +401,18 @@ private void updateChunkForBlockEvent(BlockEvent event) {
             httpServer = HttpServer.create(new InetSocketAddress(4567), 0);
             httpServer.createContext("/chunkdata", new ChunkDataHandler());
             httpServer.createContext("/dimensions", new DimensionsHandler());
-            httpServer.createContext("/chunkupdate", new ChunkUpdateHandler()); 
+            httpServer.createContext("/chunkupdate", new ChunkUpdateHandler());
             httpServer.createContext("/triggerupdate", new TriggerUpdateHandler());
+
+            // NEW: Block library endpoints
+            httpServer.createContext("/blocks", new BlocksHandler());
+            httpServer.createContext("/blocks/categories", new BlockCategoriesHandler());
+            httpServer.createContext("/buildables", new BuildablesHandler());
+
             httpServer.setExecutor(Executors.newFixedThreadPool(threads));
             httpServer.start();
+            System.out.println("WorldInfo HTTP Server started on port 4567");
+            System.out.println("Available endpoints: /chunkdata, /dimensions, /chunkupdate, /triggerupdate, /blocks, /blocks/categories, /buildables");
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -524,6 +733,144 @@ private void updateChunkForBlockEvent(BlockEvent event) {
         exchange.sendResponseHeaders(statusCode, bytes.length);
         try (OutputStream os = exchange.getResponseBody()) {
             os.write(bytes);
+        }
+    }
+
+    // ===== NEW HANDLERS FOR BLOCK LIBRARY =====
+
+    /**
+     * Handler for /blocks endpoint
+     * Returns a flat list of all available blocks
+     * Performance: Uses cached JSON response
+     */
+    private class BlocksHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendResponse(exchange, 405, "{\"error\":\"Method Not Allowed\"}");
+                return;
+            }
+
+            // Use cached response if available (performance optimization)
+            if (cachedBlocksJson == null) {
+                synchronized (WorldInfo.class) {
+                    if (cachedBlocksJson == null) {
+                        JsonObject response = new JsonObject();
+                        JsonArray blocksArray = new JsonArray();
+
+                        List<String> allBlocks = getAllBlocks();
+                        for (String block : allBlocks) {
+                            blocksArray.add(block);
+                        }
+
+                        response.addProperty("count", allBlocks.size());
+                        response.add("blocks", blocksArray);
+                        response.addProperty("source", "WorldInfo Mod");
+                        response.addProperty("version", "1.0");
+
+                        cachedBlocksJson = response.toString();
+                        System.out.println("Generated cached blocks JSON (" + allBlocks.size() + " blocks)");
+                    }
+                }
+            }
+
+            sendResponse(exchange, 200, cachedBlocksJson);
+        }
+    }
+
+    /**
+     * Handler for /blocks/categories endpoint
+     * Returns blocks organized by category
+     * Performance: Uses cached JSON response
+     */
+    private class BlockCategoriesHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendResponse(exchange, 405, "{\"error\":\"Method Not Allowed\"}");
+                return;
+            }
+
+            // Use cached response if available (performance optimization)
+            if (cachedBlockCategoriesJson == null) {
+                synchronized (WorldInfo.class) {
+                    if (cachedBlockCategoriesJson == null) {
+                        JsonObject response = new JsonObject();
+                        JsonObject categoriesObj = new JsonObject();
+
+                        int totalBlocks = 0;
+                        for (Map.Entry<String, List<String>> entry : BLOCK_CATEGORIES.entrySet()) {
+                            JsonArray blocksArray = new JsonArray();
+                            for (String block : entry.getValue()) {
+                                blocksArray.add(block);
+                            }
+                            categoriesObj.add(entry.getKey(), blocksArray);
+                            totalBlocks += entry.getValue().size();
+                        }
+
+                        response.add("categories", categoriesObj);
+                        response.addProperty("totalCategories", BLOCK_CATEGORIES.size());
+                        response.addProperty("totalBlocks", totalBlocks);
+                        response.addProperty("source", "WorldInfo Mod");
+                        response.addProperty("version", "1.0");
+
+                        cachedBlockCategoriesJson = response.toString();
+                        System.out.println("Generated cached block categories JSON (" + BLOCK_CATEGORIES.size() + " categories, " + totalBlocks + " blocks)");
+                    }
+                }
+            }
+
+            sendResponse(exchange, 200, cachedBlockCategoriesJson);
+        }
+    }
+
+    /**
+     * Handler for /buildables endpoint
+     * Returns buildable structures and components with metadata
+     * Performance: Uses cached JSON response
+     */
+    private class BuildablesHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendResponse(exchange, 405, "{\"error\":\"Method Not Allowed\"}");
+                return;
+            }
+
+            // Use cached response if available (performance optimization)
+            if (cachedBuildablesJson == null) {
+                synchronized (WorldInfo.class) {
+                    if (cachedBuildablesJson == null) {
+                        Map<String, Object> buildables = getBuildables();
+
+                        JsonObject response = new JsonObject();
+
+                        // Convert buildables map to JSON
+                        for (Map.Entry<String, Object> entry : buildables.entrySet()) {
+                            @SuppressWarnings("unchecked")
+                            List<Map<String, String>> items = (List<Map<String, String>>) entry.getValue();
+
+                            JsonArray itemsArray = new JsonArray();
+                            for (Map<String, String> item : items) {
+                                JsonObject itemObj = new JsonObject();
+                                itemObj.addProperty("name", item.get("name"));
+                                itemObj.addProperty("blockId", item.get("blockId"));
+                                itemObj.addProperty("description", item.get("description"));
+                                itemsArray.add(itemObj);
+                            }
+                            response.add(entry.getKey(), itemsArray);
+                        }
+
+                        response.addProperty("source", "WorldInfo Mod");
+                        response.addProperty("version", "1.0");
+
+                        cachedBuildablesJson = response.toString();
+                        System.out.println("Generated cached buildables JSON");
+                    }
+                }
+            }
+
+            sendResponse(exchange, 200, cachedBuildablesJson);
         }
     }
 }
