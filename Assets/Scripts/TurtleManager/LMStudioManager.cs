@@ -507,6 +507,32 @@ You are the brain, turtle is the body.";
         prompt.AppendLine(AIBlockLibrary.GetConciseBlockLibrary());
         prompt.AppendLine();
 
+        // NEW: Add turtle's current inventory information
+        if (baseManager != null)
+        {
+            var status = baseManager.GetCurrentStatus();
+
+            if (status.inventoryBlocks != null && status.inventoryBlocks.Length > 0)
+            {
+                prompt.AppendLine("TURTLE'S CURRENT INVENTORY:");
+                foreach (var block in status.inventoryBlocks)
+                {
+                    if (block != null)
+                    {
+                        prompt.AppendLine($"  - {block.name} x{block.totalCount}");
+                    }
+                }
+                prompt.AppendLine();
+                prompt.AppendLine("NOTE: Prioritize using blocks from the turtle's inventory when possible.");
+                prompt.AppendLine();
+            }
+            else
+            {
+                prompt.AppendLine("TURTLE'S INVENTORY: Empty - design with any available blocks");
+                prompt.AppendLine();
+            }
+        }
+
         prompt.AppendLine("REQUIRED OUTPUT FORMAT:");
         prompt.AppendLine("{");
         prompt.AppendLine("  \"name\": \"Structure Name\",");

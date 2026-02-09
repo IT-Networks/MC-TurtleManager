@@ -22,6 +22,79 @@ local validFuelItems = {
     ["minecraft:blaze_rod"] = true,
 }
 
+-- All available blocks for construction (synced with Unity AIBlockLibrary)
+local AVAILABLE_BLOCKS = {
+    -- Stone & Bricks
+    "minecraft:stone", "minecraft:cobblestone", "minecraft:stone_bricks",
+    "minecraft:mossy_stone_bricks", "minecraft:smooth_stone", "minecraft:andesite",
+    "minecraft:polished_andesite", "minecraft:diorite", "minecraft:polished_diorite",
+    "minecraft:granite", "minecraft:polished_granite", "minecraft:deepslate",
+    "minecraft:deepslate_bricks", "minecraft:deepslate_tiles",
+
+    -- Wood & Planks
+    "minecraft:oak_planks", "minecraft:oak_log", "minecraft:stripped_oak_log",
+    "minecraft:spruce_planks", "minecraft:spruce_log", "minecraft:birch_planks",
+    "minecraft:birch_log", "minecraft:jungle_planks", "minecraft:jungle_log",
+    "minecraft:acacia_planks", "minecraft:acacia_log", "minecraft:dark_oak_planks",
+    "minecraft:dark_oak_log", "minecraft:mangrove_planks", "minecraft:mangrove_log",
+    "minecraft:cherry_planks", "minecraft:cherry_log", "minecraft:crimson_planks",
+    "minecraft:crimson_stem", "minecraft:warped_planks", "minecraft:warped_stem",
+
+    -- Glass
+    "minecraft:glass", "minecraft:white_stained_glass", "minecraft:light_gray_stained_glass",
+    "minecraft:gray_stained_glass", "minecraft:black_stained_glass", "minecraft:brown_stained_glass",
+    "minecraft:red_stained_glass", "minecraft:orange_stained_glass", "minecraft:yellow_stained_glass",
+    "minecraft:lime_stained_glass", "minecraft:green_stained_glass", "minecraft:cyan_stained_glass",
+    "minecraft:light_blue_stained_glass", "minecraft:blue_stained_glass", "minecraft:purple_stained_glass",
+    "minecraft:magenta_stained_glass", "minecraft:pink_stained_glass", "minecraft:glass_pane",
+
+    -- Concrete
+    "minecraft:white_concrete", "minecraft:light_gray_concrete", "minecraft:gray_concrete",
+    "minecraft:black_concrete", "minecraft:brown_concrete", "minecraft:red_concrete",
+    "minecraft:orange_concrete", "minecraft:yellow_concrete", "minecraft:lime_concrete",
+    "minecraft:green_concrete", "minecraft:cyan_concrete", "minecraft:light_blue_concrete",
+    "minecraft:blue_concrete", "minecraft:purple_concrete", "minecraft:magenta_concrete",
+    "minecraft:pink_concrete",
+
+    -- Slabs & Stairs
+    "minecraft:oak_slab", "minecraft:spruce_slab", "minecraft:stone_slab", "minecraft:stone_brick_slab",
+    "minecraft:oak_stairs", "minecraft:spruce_stairs", "minecraft:stone_stairs", "minecraft:stone_brick_stairs",
+
+    -- Doors & Gates
+    "minecraft:oak_door", "minecraft:spruce_door", "minecraft:oak_fence", "minecraft:spruce_fence",
+    "minecraft:oak_fence_gate", "minecraft:iron_door", "minecraft:iron_bars",
+
+    -- Lighting
+    "minecraft:torch", "minecraft:lantern", "minecraft:glowstone", "minecraft:sea_lantern",
+    "minecraft:redstone_lamp", "minecraft:shroomlight",
+
+    -- Functional
+    "minecraft:chest", "minecraft:barrel", "minecraft:crafting_table", "minecraft:furnace",
+    "minecraft:bookshelf", "minecraft:ladder", "minecraft:bed",
+
+    -- Create Mod - Kinetic
+    "create:cogwheel", "create:large_cogwheel", "create:shaft", "create:gearbox",
+    "create:clutch", "create:gearshift", "create:encased_chain_drive", "create:adjustable_chain_gearshift",
+
+    -- Create Mod - Generators
+    "create:water_wheel", "create:windmill_bearing", "create:steam_engine", "create:motor",
+
+    -- Create Mod - Logistics
+    "create:mechanical_arm", "create:deployer", "create:mechanical_drill", "create:mechanical_saw",
+    "create:mechanical_harvester", "create:mechanical_plough", "create:portable_storage_interface",
+
+    -- Create Mod - Processing
+    "create:millstone", "create:crushing_wheel", "create:mechanical_press", "create:mechanical_mixer",
+    "create:encased_fan", "create:item_drain",
+
+    -- Create Mod - Storage
+    "create:item_vault", "create:belt_connector", "create:chute", "create:smart_chute",
+
+    -- ATM10 Mods
+    "pipez:item_pipe", "pipez:gas_pipe", "pipez:fluid_pipe", "pipez:energy_pipe",
+    "mekanism:logistical_transporter", "mekanism:pressurized_tube", "mekanism:mechanical_pipe",
+}
+
 if not table.find then
     function table.find(tbl, val)
         for i, v in ipairs(tbl) do
@@ -109,6 +182,42 @@ function getEquippedTool()
     return {left = toolLeft, right = toolRight}
 end
 
+-- Get all available blocks (comprehensive list)
+function getAllAvailableBlocks()
+    return AVAILABLE_BLOCKS
+end
+
+-- Get unique block types currently in turtle's inventory
+function getInventoryBlockTypes()
+    local blockTypes = {}
+    local seen = {}
+
+    for slot = 1, 16 do
+        local detail = turtle.getItemDetail(slot)
+        if detail and not seen[detail.name] then
+            table.insert(blockTypes, {
+                name = detail.name,
+                totalCount = detail.count
+            })
+            seen[detail.name] = true
+        end
+    end
+
+    return blockTypes
+end
+
+-- Count total blocks of a specific type in inventory
+function countBlocksInInventory(blockName)
+    local total = 0
+    for slot = 1, 16 do
+        local detail = turtle.getItemDetail(slot)
+        if detail and detail.name == blockName then
+            total = total + detail.count
+        end
+    end
+    return total
+end
+
 function reportStatus()
     local status = {
         position = pos,
@@ -122,6 +231,9 @@ function reportStatus()
         inventory = getInventoryStatus(),
         equippedToolRight = peripheral.getType("right") or "none",
         equippedToolLeft = peripheral.getType("left") or "none",
+        -- NEW: Available blocks information
+        availableBlocks = getAllAvailableBlocks(),  -- Complete list of known blocks
+        inventoryBlocks = getInventoryBlockTypes(), -- Blocks currently in inventory
     }
     local json = textutils.serializeJSON(status)
     http.post(SERVER_STATUS_URL, json, {["Content-Type"] = "application/json"})
