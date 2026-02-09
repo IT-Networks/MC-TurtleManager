@@ -5,8 +5,30 @@ using System.Text;
 using UnityEngine.Networking;
 
 /// <summary>
-/// LM Studio AI Integration for Turtle Control
-/// Allows an AI model to control turtles based on their inventory and surroundings
+/// LM Studio AI Integration for Turtle Control and Structure Generation
+///
+/// ARCHITECTURE:
+/// - Unity (C#) contains ALL intelligence and decision-making
+/// - Turtle (Lua) is "dumb" - only executes simple commands and reports status
+/// - LM Studio AI (optional) makes intelligent decisions for turtles
+///
+/// TWO MODES:
+/// 1. TURTLE CONTROL: AI decides turtle actions (mine, move, refuel)
+///    Flow: Turtle Status → Unity → LM Studio AI → Command Decision → Unity → Turtle Executes
+///
+/// 2. STRUCTURE GENERATION: AI designs structures from natural language prompts
+///    Flow: User Prompt → LM Studio AI → JSON Structure → Parser → StructureData → Turtle Builds
+///
+/// TURTLE COMMANDS (executed by dumb turtle):
+/// - Movement: forward, back, up, down, turnLeft, turnRight
+/// - Mining: dig, digUp, digDown
+/// - Building: place, placeUp, placeDown
+/// - Inventory: select, drop, suck, refuel
+///
+/// The turtle has NO intelligence - it only:
+/// 1. Executes commands received from Unity
+/// 2. Reports status (position, fuel, inventory, nearby blocks)
+/// 3. Returns to Unity for next command
 /// </summary>
 public class LMStudioManager : MonoBehaviour
 {
@@ -194,32 +216,28 @@ public class LMStudioManager : MonoBehaviour
     /// </summary>
     private IEnumerator SendLMStudioRequest(string userMessage)
     {
-        // Build request
-        var messages = new List<Dictionary<string, string>>();
+        // Manually build JSON request (JsonUtility doesn't handle nested structures well)
+        StringBuilder jsonBuilder = new StringBuilder();
+        jsonBuilder.Append("{");
+        jsonBuilder.Append($"\"model\":\"{modelName}\",");
+        jsonBuilder.Append("\"messages\":[");
 
-        // Add system prompt
-        messages.Add(new Dictionary<string, string>
-        {
-            { "role", "system" },
-            { "content", conversationHistory[0] }
-        });
+        // System message
+        jsonBuilder.Append("{\"role\":\"system\",\"content\":\"");
+        jsonBuilder.Append(EscapeJsonString(conversationHistory[0]));
+        jsonBuilder.Append("\"},");
 
-        // Add user message
-        messages.Add(new Dictionary<string, string>
-        {
-            { "role", "user" },
-            { "content", userMessage }
-        });
+        // User message
+        jsonBuilder.Append("{\"role\":\"user\",\"content\":\"");
+        jsonBuilder.Append(EscapeJsonString(userMessage));
+        jsonBuilder.Append("\"}");
 
-        var requestData = new Dictionary<string, object>
-        {
-            { "model", modelName },
-            { "messages", messages },
-            { "temperature", temperature },
-            { "max_tokens", maxTokens }
-        };
+        jsonBuilder.Append("],");
+        jsonBuilder.Append($"\"temperature\":{temperature},");
+        jsonBuilder.Append($"\"max_tokens\":{maxTokens}");
+        jsonBuilder.Append("}");
 
-        string jsonRequest = JsonUtility.ToJson(requestData);
+        string jsonRequest = jsonBuilder.ToString();
         byte[] bodyRaw = Encoding.UTF8.GetBytes(jsonRequest);
 
         UnityWebRequest request = new UnityWebRequest(lmStudioUrl, "POST");
@@ -361,59 +379,52 @@ public class LMStudioManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Get system prompt for AI
+    /// Get system prompt for AI turtle control
     /// </summary>
     private string GetSystemPrompt()
     {
-        return @"You are an AI controlling a Minecraft turtle (robot). Your goal is to help the player by mining resources, building structures, and managing your inventory efficiently.
+        return @"You are an AI making decisions for a Minecraft turtle (mining robot).
+
+ROLE: Analyze the turtle's situation and decide the next action.
+
+THE TURTLE IS ""DUMB"":
+- The turtle ONLY executes simple commands you send
+- It has NO intelligence of its own
+- It reports status: position, fuel, inventory, nearby blocks
+- YOU make ALL decisions based on this status
 
 AVAILABLE COMMANDS:
-Movement:
-- forward, back, up, down, left, right
+Movement: forward, back, up, down, left, right
+Mining: mine, mine_up, mine_down
+Inventory: store_items, refuel
+Utility: scan, wait
 
-Mining:
-- mine (mine block in front)
-- mine_up (mine block above)
-- mine_down (mine block below)
+DECISION PRIORITY:
+1. SURVIVAL: fuel < 20% → refuel immediately
+2. INVENTORY: > 14/16 slots full → store_items
+3. MINING: valuable ores detected → mine them
+4. EFFICIENCY: minimize movement, save fuel
+5. SAFETY: avoid mining into holes/lava
 
-Inventory:
-- store_items (return to chest, store items, return)
-- refuel (refuel from inventory or chest)
-
-Utility:
-- scan (scan surroundings for blocks)
-- wait (do nothing this turn)
-
-DECISION MAKING RULES:
-1. FUEL MANAGEMENT: If fuel < 20%, prioritize refueling
-2. INVENTORY: If inventory > 14/16 slots, store items in chest
-3. MINING: Mine valuable ores (diamond, gold, iron) when detected
-4. EFFICIENCY: Minimize unnecessary movement to save fuel
-5. SAFETY: Don't mine yourself into a hole you can't escape
-
-RESPONSE FORMAT:
-You must respond with:
-COMMAND:<command>
-REASON:<why you chose this command>
+REQUIRED RESPONSE FORMAT:
+COMMAND:<single_command>
+REASON:<brief explanation>
 
 Example:
-COMMAND:mine
-REASON:Detected diamond ore in front, mining to collect valuable resource
+COMMAND:refuel
+REASON:Fuel at 15%, critical - must refuel before continuing
 
-CONTEXT:
-You will receive updates about your:
-- Current position
-- Fuel level
-- Inventory contents
-- Nearby valuable blocks
-- Current task
+CONTEXT PROVIDED:
+You will receive:
+- Position (x, y, z)
+- Fuel level (current/max)
+- Inventory (slots used, items)
+- Nearby blocks (ores detected)
+- Current status
 
-Make smart decisions based on this information. Prioritize:
-1. Survival (fuel and safety)
-2. Resource gathering (ores)
-3. Efficiency (minimize wasted movement)
-
-Always explain your reasoning to help the player understand your decision.";
+Make ONE decision per turn. The turtle executes it and reports back.
+Unity sends your command to the turtle, turtle executes, reports status.
+You are the brain, turtle is the body.";
     }
 
     /// <summary>
@@ -486,30 +497,37 @@ Always explain your reasoning to help the player understand your decision.";
     {
         StringBuilder prompt = new StringBuilder();
 
-        prompt.AppendLine("=== MINECRAFT STRUCTURE GENERATION REQUEST ===");
+        prompt.AppendLine("=== STRUCTURE GENERATION REQUEST ===");
         prompt.AppendLine();
-        prompt.AppendLine($"USER REQUEST: {userPrompt}");
+        prompt.AppendLine($"USER WANTS: {userPrompt}");
         prompt.AppendLine();
 
         // Add block library (concise version to save tokens)
+        prompt.AppendLine("AVAILABLE BLOCKS:");
         prompt.AppendLine(AIBlockLibrary.GetConciseBlockLibrary());
         prompt.AppendLine();
 
-        // Add format instructions
-        prompt.AppendLine(AIStructureParser.GetExampleFormat());
+        prompt.AppendLine("REQUIRED OUTPUT FORMAT:");
+        prompt.AppendLine("{");
+        prompt.AppendLine("  \"name\": \"Structure Name\",");
+        prompt.AppendLine("  \"description\": \"Brief description\",");
+        prompt.AppendLine("  \"blocks\": [");
+        prompt.AppendLine("    {\"pos\": [x,y,z], \"type\": \"blocktype\"},");
+        prompt.AppendLine("    {\"pos\": [x,y,z], \"type\": \"blocktype\"}");
+        prompt.AppendLine("  ]");
+        prompt.AppendLine("}");
         prompt.AppendLine();
 
-        prompt.AppendLine("IMPORTANT INSTRUCTIONS:");
-        prompt.AppendLine("1. Design a structure that matches the user's request");
-        prompt.AppendLine("2. Use ONLY blocks from the provided block library");
-        prompt.AppendLine("3. Use realistic proportions (houses are typically 5-10 blocks wide/deep, 3-5 blocks tall)");
-        prompt.AppendLine("4. Include functional details (doors, windows, lighting)");
-        prompt.AppendLine("5. For Create mod builds, ensure mechanical connections make sense");
-        prompt.AppendLine("6. Coordinates are relative - will be placed at turtle's location");
-        prompt.AppendLine("7. Build from bottom-up (Y=0 is ground level)");
+        prompt.AppendLine("CRITICAL RULES:");
+        prompt.AppendLine("1. Output ONLY valid JSON - no explanations, no markdown code blocks");
+        prompt.AppendLine("2. Use blocks ONLY from the library above");
+        prompt.AppendLine("3. Coordinates start at [0,0,0] (ground level), Y increases upward");
+        prompt.AppendLine("4. Include foundation, walls, roof, doors, windows, lighting");
+        prompt.AppendLine("5. For Create mod: connect gears/shafts logically");
+        prompt.AppendLine("6. Size: reasonable (houses ~5-10 blocks wide, 3-5 tall)");
         prompt.AppendLine();
 
-        prompt.AppendLine("Respond with ONLY the JSON or block list format. No additional commentary.");
+        prompt.AppendLine("Generate the structure now. Output ONLY the JSON.");
 
         return prompt.ToString();
     }
@@ -519,31 +537,28 @@ Always explain your reasoning to help the player understand your decision.";
     /// </summary>
     private IEnumerator SendStructureGenerationRequest(string prompt)
     {
-        var messages = new List<Dictionary<string, string>>();
+        // Manually build JSON request (JsonUtility doesn't handle nested dictionaries well)
+        StringBuilder jsonBuilder = new StringBuilder();
+        jsonBuilder.Append("{");
+        jsonBuilder.Append($"\"model\":\"{modelName}\",");
+        jsonBuilder.Append("\"messages\":[");
 
-        // System prompt for structure generation
-        messages.Add(new Dictionary<string, string>
-        {
-            { "role", "system" },
-            { "content", GetStructureGenerationSystemPrompt() }
-        });
+        // System message
+        jsonBuilder.Append("{\"role\":\"system\",\"content\":\"");
+        jsonBuilder.Append(EscapeJsonString(GetStructureGenerationSystemPrompt()));
+        jsonBuilder.Append("\"},");
 
-        // User request
-        messages.Add(new Dictionary<string, string>
-        {
-            { "role", "user" },
-            { "content", prompt }
-        });
+        // User message
+        jsonBuilder.Append("{\"role\":\"user\",\"content\":\"");
+        jsonBuilder.Append(EscapeJsonString(prompt));
+        jsonBuilder.Append("\"}");
 
-        var requestData = new Dictionary<string, object>
-        {
-            { "model", modelName },
-            { "messages", messages },
-            { "temperature", 0.7f },  // Slightly creative but not random
-            { "max_tokens", 2000 }    // Allow for larger structures
-        };
+        jsonBuilder.Append("],");
+        jsonBuilder.Append("\"temperature\":0.7,");
+        jsonBuilder.Append("\"max_tokens\":2000");
+        jsonBuilder.Append("}");
 
-        string jsonRequest = JsonUtility.ToJson(requestData);
+        string jsonRequest = jsonBuilder.ToString();
         byte[] bodyRaw = Encoding.UTF8.GetBytes(jsonRequest);
 
         UnityWebRequest request = new UnityWebRequest(lmStudioUrl, "POST");
@@ -647,31 +662,72 @@ Always explain your reasoning to help the player understand your decision.";
     /// </summary>
     private string GetStructureGenerationSystemPrompt()
     {
-        return @"You are a Minecraft architect AI. Your task is to design structures for Minecraft turtles to build.
+        return @"You are a Minecraft architect AI designing structures for autonomous turtles to build.
+
+ROLE: Generate buildable structures based on user requests.
 
 CAPABILITIES:
-- Design buildings (houses, towers, castles, etc.)
-- Create mechanical systems using Create mod (gears, belts, conveyor systems)
-- Design industrial setups with pipes and cables from ATM10 mods
-- Combine vanilla blocks with modded components
+- Design buildings: houses, towers, castles, bridges, etc.
+- Create mechanical systems: Create mod gears, belts, conveyor systems
+- Design industrial setups: pipes, cables, machines (ATM10 mods)
+- Combine vanilla Minecraft blocks with modded components
 
 DESIGN PRINCIPLES:
-1. REALISTIC PROPORTIONS: Houses are 5-10 blocks wide, 3-5 blocks tall
-2. FUNCTIONAL DESIGN: Include doors, windows, proper lighting
-3. MECHANICAL LOGIC: Create mod components must connect properly
-4. STRUCTURAL INTEGRITY: Build solid foundations
-5. AESTHETIC BALANCE: Mix materials for visual appeal
+1. REALISTIC PROPORTIONS: Houses 5-10 blocks wide/deep, 3-5 blocks tall
+2. FUNCTIONAL: Include doors, windows, lighting (torches/lanterns)
+3. MECHANICAL LOGIC: Create mod gears/belts must connect properly
+4. STRUCTURAL INTEGRITY: Solid foundations, no floating blocks
+5. BUILDABLE: Bottom-up construction (Y=0 is ground, build upward)
 
-TECHNICAL REQUIREMENTS:
+TECHNICAL CONSTRAINTS:
 - Use ONLY blocks from the provided block library
-- Coordinates are relative (0,0,0 is ground level)
-- Y-axis: Build upward from 0
-- Include structural supports for large builds
-- Ensure turtles can physically build it (bottom-up construction)
+- Coordinates are relative (will be placed at turtle location)
+- Start at Y=0 (ground level), build upward
+- Turtles build bottom-up, one block at a time
+- Maximum reasonable size: 20x20x20 blocks
 
-OUTPUT FORMAT:
-Respond with ONLY valid JSON or block list format. No explanations, just the structure data.
+OUTPUT FORMAT - CRITICAL:
+You MUST respond with ONLY valid JSON in this EXACT format:
+{
+  ""name"": ""Structure Name"",
+  ""description"": ""Brief description"",
+  ""blocks"": [
+    {""pos"": [0,0,0], ""type"": ""minecraft:stone""},
+    {""pos"": [1,0,0], ""type"": ""minecraft:oak_planks""},
+    {""pos"": [0,1,0], ""type"": ""create:cogwheel""}
+  ]
+}
 
-Be creative but practical. Design structures that are both beautiful and buildable.";
+IMPORTANT:
+- NO explanations, NO commentary, ONLY the JSON structure
+- Use double quotes for JSON strings
+- Block types must exactly match the provided library
+- Coordinates: [x, y, z] as integers
+- Build from Y=0 upward
+
+TURTLE EXECUTION:
+The turtle is ""dumb"" and ONLY executes these commands:
+- Movement: forward, back, up, down, turnLeft, turnRight
+- Actions: dig, digUp, digDown, place, placeUp, placeDown
+- Utility: select, refuel, drop, suck
+The turtle receives your structure as block positions and builds automatically.
+
+Be creative but practical. Design beautiful, functional, buildable structures.";
+    }
+
+    /// <summary>
+    /// Escape string for JSON
+    /// </summary>
+    private string EscapeJsonString(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return "";
+
+        return text
+            .Replace("\\", "\\\\")  // Backslash
+            .Replace("\"", "\\\"")  // Quote
+            .Replace("\n", "\\n")   // Newline
+            .Replace("\r", "\\r")   // Carriage return
+            .Replace("\t", "\\t");  // Tab
     }
 }
