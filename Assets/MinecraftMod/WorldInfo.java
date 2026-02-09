@@ -3,12 +3,16 @@ package com.worldinfo.worldinfomod;
 import com.google.gson.*;
 import com.google.gson.reflect.TypeToken;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.neoforged.fml.common.Mod;
@@ -57,160 +61,225 @@ public class WorldInfo {
     private static String cachedBuildablesJson = null;
     private static String cachedBlockCategoriesJson = null;
 
-    // ===== BLOCK LIBRARY - Central Source of Truth =====
-    // This replaces hardcoded lists in Lua scripts and Unity
-    private static final Map<String, List<String>> BLOCK_CATEGORIES = initializeBlockCategories();
+    // ===== DYNAMIC BLOCK LIBRARY - Central Source of Truth =====
+    // Blocks are now read dynamically from Minecraft's Block Registry
+    // This automatically includes all blocks from Minecraft, Create, and installed mods
 
-    private static Map<String, List<String>> initializeBlockCategories() {
+    // Cached block data (invalidated on server restart)
+    private static Map<String, List<String>> cachedBlockCategories = null;
+    private static List<String> cachedAllBlocks = null;
+
+    /**
+     * Dynamically loads all blocks from Minecraft's Block Registry
+     * Categorizes blocks based on their namespace and naming patterns
+     * @return Map of category names to lists of block IDs
+     */
+    private static Map<String, List<String>> getBlockCategories() {
+        if (cachedBlockCategories != null) {
+            return cachedBlockCategories;
+        }
+
         Map<String, List<String>> categories = new LinkedHashMap<>();
 
-        // === BASIC BUILDING MATERIALS ===
-        categories.put("Stone & Bricks", Arrays.asList(
-            "minecraft:stone", "minecraft:cobblestone", "minecraft:stone_bricks",
-            "minecraft:mossy_stone_bricks", "minecraft:cracked_stone_bricks", "minecraft:chiseled_stone_bricks",
-            "minecraft:smooth_stone", "minecraft:andesite", "minecraft:polished_andesite",
-            "minecraft:diorite", "minecraft:polished_diorite", "minecraft:granite", "minecraft:polished_granite",
-            "minecraft:deepslate", "minecraft:deepslate_bricks", "minecraft:cracked_deepslate_bricks",
-            "minecraft:deepslate_tiles", "minecraft:cracked_deepslate_tiles"
-        ));
+        // Lists for dynamic categorization
+        List<String> stoneBlocks = new ArrayList<>();
+        List<String> woodBlocks = new ArrayList<>();
+        List<String> glassBlocks = new ArrayList<>();
+        List<String> concreteBlocks = new ArrayList<>();
+        List<String> woolBlocks = new ArrayList<>();
+        List<String> slabs = new ArrayList<>();
+        List<String> stairs = new ArrayList<>();
+        List<String> fences = new ArrayList<>();
+        List<String> doors = new ArrayList<>();
+        List<String> storage = new ArrayList<>();
+        List<String> lighting = new ArrayList<>();
+        List<String> createKinetic = new ArrayList<>();
+        List<String> createGenerators = new ArrayList<>();
+        List<String> createLogistics = new ArrayList<>();
+        List<String> createProcessing = new ArrayList<>();
+        List<String> createStorage = new ArrayList<>();
+        List<String> pipez = new ArrayList<>();
+        List<String> mekanism = new ArrayList<>();
+        List<String> thermal = new ArrayList<>();
+        List<String> decorative = new ArrayList<>();
+        List<String> other = new ArrayList<>();
 
-        categories.put("Wood & Planks", Arrays.asList(
-            "minecraft:oak_planks", "minecraft:oak_log", "minecraft:stripped_oak_log",
-            "minecraft:spruce_planks", "minecraft:spruce_log", "minecraft:stripped_spruce_log",
-            "minecraft:birch_planks", "minecraft:birch_log", "minecraft:stripped_birch_log",
-            "minecraft:jungle_planks", "minecraft:jungle_log", "minecraft:stripped_jungle_log",
-            "minecraft:acacia_planks", "minecraft:acacia_log", "minecraft:stripped_acacia_log",
-            "minecraft:dark_oak_planks", "minecraft:dark_oak_log", "minecraft:stripped_dark_oak_log",
-            "minecraft:mangrove_planks", "minecraft:mangrove_log", "minecraft:stripped_mangrove_log",
-            "minecraft:cherry_planks", "minecraft:cherry_log", "minecraft:stripped_cherry_log",
-            "minecraft:crimson_planks", "minecraft:crimson_stem", "minecraft:stripped_crimson_stem",
-            "minecraft:warped_planks", "minecraft:warped_stem", "minecraft:stripped_warped_stem"
-        ));
+        // Iterate through all registered blocks
+        for (Block block : BuiltInRegistries.BLOCK) {
+            ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(block);
+            if (blockId == null) continue;
 
-        categories.put("Glass & Transparent", Arrays.asList(
-            "minecraft:glass", "minecraft:white_stained_glass", "minecraft:light_gray_stained_glass",
-            "minecraft:gray_stained_glass", "minecraft:black_stained_glass", "minecraft:brown_stained_glass",
-            "minecraft:red_stained_glass", "minecraft:orange_stained_glass", "minecraft:yellow_stained_glass",
-            "minecraft:lime_stained_glass", "minecraft:green_stained_glass", "minecraft:cyan_stained_glass",
-            "minecraft:light_blue_stained_glass", "minecraft:blue_stained_glass", "minecraft:purple_stained_glass",
-            "minecraft:magenta_stained_glass", "minecraft:pink_stained_glass", "minecraft:glass_pane", "minecraft:iron_bars"
-        ));
+            String fullId = blockId.toString();
+            String namespace = blockId.getNamespace();
+            String path = blockId.getPath();
 
-        categories.put("Concrete & Terracotta", Arrays.asList(
-            "minecraft:white_concrete", "minecraft:light_gray_concrete", "minecraft:gray_concrete",
-            "minecraft:black_concrete", "minecraft:brown_concrete", "minecraft:red_concrete",
-            "minecraft:orange_concrete", "minecraft:yellow_concrete", "minecraft:lime_concrete",
-            "minecraft:green_concrete", "minecraft:cyan_concrete", "minecraft:light_blue_concrete",
-            "minecraft:blue_concrete", "minecraft:purple_concrete", "minecraft:magenta_concrete",
-            "minecraft:pink_concrete", "minecraft:white_terracotta", "minecraft:terracotta"
-        ));
+            // Skip air and technical blocks
+            if (block == Blocks.AIR || block == Blocks.CAVE_AIR || block == Blocks.VOID_AIR) {
+                continue;
+            }
+            if (path.contains("potted_") || path.contains("wall_") && path.contains("_banner")) {
+                continue;
+            }
 
-        categories.put("Wool & Carpet", Arrays.asList(
-            "minecraft:white_wool", "minecraft:light_gray_wool", "minecraft:gray_wool",
-            "minecraft:black_wool", "minecraft:brown_wool", "minecraft:red_wool",
-            "minecraft:orange_wool", "minecraft:yellow_wool", "minecraft:lime_wool",
-            "minecraft:green_wool", "minecraft:cyan_wool", "minecraft:light_blue_wool",
-            "minecraft:blue_wool", "minecraft:purple_wool", "minecraft:magenta_wool", "minecraft:pink_wool"
-        ));
+            // Categorize by namespace and name patterns
+            if (namespace.equals("minecraft")) {
+                // Stone & Bricks
+                if (path.contains("stone") && !path.contains("_slab") && !path.contains("_stairs")
+                    || path.contains("brick") && !path.contains("_slab") && !path.contains("_stairs")
+                    || path.contains("andesite") || path.contains("diorite") || path.contains("granite")
+                    || path.contains("deepslate") || path.equals("cobblestone")) {
+                    stoneBlocks.add(fullId);
+                }
+                // Wood & Planks
+                else if (path.contains("planks") || path.contains("_log") || path.contains("_stem")
+                         || path.contains("stripped_")) {
+                    woodBlocks.add(fullId);
+                }
+                // Glass
+                else if (path.contains("glass") || path.contains("_pane")) {
+                    glassBlocks.add(fullId);
+                }
+                // Concrete & Terracotta
+                else if (path.contains("concrete") || path.contains("terracotta")) {
+                    concreteBlocks.add(fullId);
+                }
+                // Wool
+                else if (path.contains("wool") || path.contains("carpet")) {
+                    woolBlocks.add(fullId);
+                }
+                // Slabs
+                else if (path.contains("_slab")) {
+                    slabs.add(fullId);
+                }
+                // Stairs
+                else if (path.contains("_stairs")) {
+                    stairs.add(fullId);
+                }
+                // Fences & Walls
+                else if (path.contains("fence") || path.contains("_wall") && !path.contains("banner")) {
+                    fences.add(fullId);
+                }
+                // Doors & Gates
+                else if (path.contains("door") || path.contains("gate") || path.contains("trapdoor")) {
+                    doors.add(fullId);
+                }
+                // Storage & Crafting
+                else if (path.contains("chest") || path.contains("barrel") || path.contains("crafting")
+                         || path.contains("furnace") || path.contains("anvil") || path.contains("enchanting")
+                         || path.contains("bookshelf") || path.contains("lectern")) {
+                    storage.add(fullId);
+                }
+                // Lighting
+                else if (path.contains("torch") || path.contains("lantern") || path.contains("glowstone")
+                         || path.contains("sea_lantern") || path.contains("shroomlight") || path.contains("end_rod")
+                         || path.contains("redstone_lamp")) {
+                    lighting.add(fullId);
+                }
+                // Decorative
+                else if (path.contains("_banner") || path.contains("carpet") || path.contains("bed")) {
+                    decorative.add(fullId);
+                }
+                else {
+                    other.add(fullId);
+                }
+            }
+            // Create Mod
+            else if (namespace.equals("create")) {
+                if (path.contains("cogwheel") || path.contains("shaft") || path.contains("gearbox")
+                    || path.contains("gearshift") || path.contains("clutch") || path.contains("chain_drive")
+                    || path.contains("speed_controller")) {
+                    createKinetic.add(fullId);
+                }
+                else if (path.contains("water_wheel") || path.contains("windmill") || path.contains("bearing")
+                         || path.contains("motor") || path.contains("engine")) {
+                    createGenerators.add(fullId);
+                }
+                else if (path.contains("arm") || path.contains("deployer") || path.contains("drill")
+                         || path.contains("saw") || path.contains("harvester") || path.contains("plough")
+                         || path.contains("funnel") || path.contains("tunnel")) {
+                    createLogistics.add(fullId);
+                }
+                else if (path.contains("millstone") || path.contains("crushing") || path.contains("press")
+                         || path.contains("mixer") || path.contains("blaze_burner") || path.contains("basin")
+                         || path.contains("drain") || path.contains("spout") || path.contains("fan")) {
+                    createProcessing.add(fullId);
+                }
+                else if (path.contains("vault") || path.contains("tank") || path.contains("chute")
+                         || path.contains("pulley")) {
+                    createStorage.add(fullId);
+                }
+                else {
+                    other.add(fullId);
+                }
+            }
+            // Pipez Mod
+            else if (namespace.equals("pipez")) {
+                pipez.add(fullId);
+            }
+            // Mekanism Mod
+            else if (namespace.equals("mekanism")) {
+                mekanism.add(fullId);
+            }
+            // Thermal Mod
+            else if (namespace.equals("thermal")) {
+                thermal.add(fullId);
+            }
+            // Other mods
+            else {
+                other.add(fullId);
+            }
+        }
 
-        // === DECORATIVE BLOCKS ===
-        categories.put("Slabs", Arrays.asList(
-            "minecraft:stone_slab", "minecraft:stone_brick_slab", "minecraft:oak_slab", "minecraft:spruce_slab",
-            "minecraft:birch_slab", "minecraft:jungle_slab", "minecraft:acacia_slab", "minecraft:dark_oak_slab",
-            "minecraft:smooth_stone_slab", "minecraft:andesite_slab", "minecraft:diorite_slab", "minecraft:granite_slab"
-        ));
+        // Only add non-empty categories
+        if (!stoneBlocks.isEmpty()) categories.put("Stone & Bricks", stoneBlocks);
+        if (!woodBlocks.isEmpty()) categories.put("Wood & Planks", woodBlocks);
+        if (!glassBlocks.isEmpty()) categories.put("Glass & Transparent", glassBlocks);
+        if (!concreteBlocks.isEmpty()) categories.put("Concrete & Terracotta", concreteBlocks);
+        if (!woolBlocks.isEmpty()) categories.put("Wool & Carpet", woolBlocks);
+        if (!slabs.isEmpty()) categories.put("Slabs", slabs);
+        if (!stairs.isEmpty()) categories.put("Stairs", stairs);
+        if (!fences.isEmpty()) categories.put("Fences & Walls", fences);
+        if (!doors.isEmpty()) categories.put("Doors & Gates", doors);
+        if (!storage.isEmpty()) categories.put("Storage & Crafting", storage);
+        if (!lighting.isEmpty()) categories.put("Lighting", lighting);
+        if (!createKinetic.isEmpty()) categories.put("Create: Kinetic Power", createKinetic);
+        if (!createGenerators.isEmpty()) categories.put("Create: Generators & Motors", createGenerators);
+        if (!createLogistics.isEmpty()) categories.put("Create: Logistics", createLogistics);
+        if (!createProcessing.isEmpty()) categories.put("Create: Processing", createProcessing);
+        if (!createStorage.isEmpty()) categories.put("Create: Storage & Containers", createStorage);
+        if (!pipez.isEmpty()) categories.put("Pipez: Transport", pipez);
+        if (!mekanism.isEmpty()) categories.put("Mekanism: Machines & Pipes", mekanism);
+        if (!thermal.isEmpty()) categories.put("Thermal: Ducts & Machines", thermal);
+        if (!decorative.isEmpty()) categories.put("Decorative", decorative);
+        if (!other.isEmpty()) categories.put("Other", other);
 
-        categories.put("Stairs", Arrays.asList(
-            "minecraft:stone_stairs", "minecraft:stone_brick_stairs", "minecraft:oak_stairs", "minecraft:spruce_stairs",
-            "minecraft:birch_stairs", "minecraft:jungle_stairs", "minecraft:acacia_stairs", "minecraft:dark_oak_stairs",
-            "minecraft:andesite_stairs", "minecraft:diorite_stairs", "minecraft:granite_stairs"
-        ));
+        // Cache the result
+        cachedBlockCategories = categories;
 
-        categories.put("Fences & Walls", Arrays.asList(
-            "minecraft:oak_fence", "minecraft:spruce_fence", "minecraft:birch_fence", "minecraft:jungle_fence",
-            "minecraft:acacia_fence", "minecraft:dark_oak_fence", "minecraft:nether_brick_fence",
-            "minecraft:cobblestone_wall", "minecraft:mossy_cobblestone_wall", "minecraft:stone_brick_wall",
-            "minecraft:andesite_wall", "minecraft:diorite_wall", "minecraft:granite_wall"
-        ));
-
-        categories.put("Doors & Gates", Arrays.asList(
-            "minecraft:oak_door", "minecraft:spruce_door", "minecraft:birch_door", "minecraft:jungle_door",
-            "minecraft:acacia_door", "minecraft:dark_oak_door", "minecraft:iron_door",
-            "minecraft:oak_fence_gate", "minecraft:spruce_fence_gate", "minecraft:birch_fence_gate",
-            "minecraft:jungle_fence_gate", "minecraft:acacia_fence_gate", "minecraft:dark_oak_fence_gate",
-            "minecraft:oak_trapdoor", "minecraft:spruce_trapdoor", "minecraft:birch_trapdoor", "minecraft:iron_trapdoor"
-        ));
-
-        // === FUNCTIONAL BLOCKS ===
-        categories.put("Storage & Crafting", Arrays.asList(
-            "minecraft:chest", "minecraft:barrel", "minecraft:crafting_table", "minecraft:furnace",
-            "minecraft:smoker", "minecraft:blast_furnace", "minecraft:anvil", "minecraft:enchanting_table",
-            "minecraft:bookshelf", "minecraft:lectern", "minecraft:ladder", "minecraft:bed"
-        ));
-
-        categories.put("Lighting", Arrays.asList(
-            "minecraft:torch", "minecraft:soul_torch", "minecraft:lantern", "minecraft:soul_lantern",
-            "minecraft:glowstone", "minecraft:sea_lantern", "minecraft:redstone_lamp",
-            "minecraft:shroomlight", "minecraft:end_rod"
-        ));
-
-        // === CREATE MOD - MECHANICAL COMPONENTS ===
-        categories.put("Create: Kinetic Power", Arrays.asList(
-            "create:cogwheel", "create:large_cogwheel", "create:shaft", "create:gearbox",
-            "create:gearshift", "create:clutch", "create:encased_chain_drive",
-            "create:adjustable_chain_gearshift", "create:rotation_speed_controller"
-        ));
-
-        categories.put("Create: Generators & Motors", Arrays.asList(
-            "create:water_wheel", "create:windmill_bearing", "create:mechanical_bearing",
-            "create:steam_engine", "create:motor", "create:creative_motor"
-        ));
-
-        categories.put("Create: Logistics", Arrays.asList(
-            "create:mechanical_arm", "create:deployer", "create:mechanical_drill", "create:mechanical_saw",
-            "create:mechanical_harvester", "create:mechanical_plough", "create:portable_storage_interface",
-            "create:andesite_funnel", "create:brass_funnel", "create:andesite_tunnel", "create:brass_tunnel"
-        ));
-
-        categories.put("Create: Conveyor Belts", Arrays.asList(
-            "create:belt_connector", "create:mechanical_belt", "create:belt_support"
-        ));
-
-        categories.put("Create: Processing", Arrays.asList(
-            "create:millstone", "create:crushing_wheel", "create:mechanical_press",
-            "create:mechanical_mixer", "create:blaze_burner", "create:basin",
-            "create:item_drain", "create:spout", "create:encased_fan"
-        ));
-
-        categories.put("Create: Storage & Containers", Arrays.asList(
-            "create:item_vault", "create:fluid_tank", "create:creative_fluid_tank",
-            "create:hose_pulley", "create:chute", "create:smart_chute"
-        ));
-
-        // === ATM10 MODS - PIPES & CABLES ===
-        categories.put("Pipez: Item Transport", Arrays.asList(
-            "pipez:item_pipe", "pipez:gas_pipe", "pipez:fluid_pipe",
-            "pipez:energy_pipe", "pipez:universal_pipe"
-        ));
-
-        categories.put("Mekanism: Logistics", Arrays.asList(
-            "mekanism:logistical_transporter", "mekanism:mechanical_pipe",
-            "mekanism:pressurized_tube", "mekanism:universal_cable", "mekanism:thermodynamic_conductor"
-        ));
-
-        categories.put("Thermal: Ducts", Arrays.asList(
-            "thermal:fluid_duct", "thermal:energy_duct", "thermal:item_duct"
-        ));
+        // Log statistics
+        int totalBlocks = categories.values().stream().mapToInt(List::size).sum();
+        System.out.println("Loaded " + totalBlocks + " blocks from registry into " + categories.size() + " categories");
 
         return categories;
     }
 
-    // Get all blocks as flat list (performance-optimized with lazy caching)
+    /**
+     * Get all blocks as flat list (performance-optimized with lazy caching)
+     * @return List of all block IDs from the registry
+     */
     private static List<String> getAllBlocks() {
+        if (cachedAllBlocks != null) {
+            return cachedAllBlocks;
+        }
+
         List<String> allBlocks = new ArrayList<>();
-        for (List<String> categoryBlocks : BLOCK_CATEGORIES.values()) {
+        Map<String, List<String>> categories = getBlockCategories();
+        for (List<String> categoryBlocks : categories.values()) {
             allBlocks.addAll(categoryBlocks);
         }
+
+        // Cache the result
+        cachedAllBlocks = allBlocks;
         return allBlocks;
     }
 
@@ -798,8 +867,9 @@ private void updateChunkForBlockEvent(BlockEvent event) {
                         JsonObject response = new JsonObject();
                         JsonObject categoriesObj = new JsonObject();
 
+                        Map<String, List<String>> blockCategories = getBlockCategories();
                         int totalBlocks = 0;
-                        for (Map.Entry<String, List<String>> entry : BLOCK_CATEGORIES.entrySet()) {
+                        for (Map.Entry<String, List<String>> entry : blockCategories.entrySet()) {
                             JsonArray blocksArray = new JsonArray();
                             for (String block : entry.getValue()) {
                                 blocksArray.add(block);
@@ -809,13 +879,13 @@ private void updateChunkForBlockEvent(BlockEvent event) {
                         }
 
                         response.add("categories", categoriesObj);
-                        response.addProperty("totalCategories", BLOCK_CATEGORIES.size());
+                        response.addProperty("totalCategories", blockCategories.size());
                         response.addProperty("totalBlocks", totalBlocks);
-                        response.addProperty("source", "WorldInfo Mod");
-                        response.addProperty("version", "1.0");
+                        response.addProperty("source", "WorldInfo Mod - Dynamic Registry");
+                        response.addProperty("version", "2.0");
 
                         cachedBlockCategoriesJson = response.toString();
-                        System.out.println("Generated cached block categories JSON (" + BLOCK_CATEGORIES.size() + " categories, " + totalBlocks + " blocks)");
+                        System.out.println("Generated cached block categories JSON (" + blockCategories.size() + " categories, " + totalBlocks + " blocks)");
                     }
                 }
             }
