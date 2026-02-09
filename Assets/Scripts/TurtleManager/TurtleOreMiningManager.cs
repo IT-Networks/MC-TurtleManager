@@ -363,7 +363,7 @@ public class TurtleOreMiningManager : MonoBehaviour
     {
         List<Vector3> vein = new List<Vector3>();
         Queue<Vector3> toCheck = new Queue<Vector3>();
-        HashSet<Vector3> checked = new HashSet<Vector3>();
+        HashSet<Vector3> checkedPositions = new HashSet<Vector3>();
 
         toCheck.Enqueue(startOrePos);
 
@@ -371,9 +371,9 @@ public class TurtleOreMiningManager : MonoBehaviour
         while (toCheck.Count > 0 && vein.Count < maxVeinSize)
         {
             Vector3 current = toCheck.Dequeue();
-            if (checked.Contains(current)) continue;
+            if (checkedPositions.Contains(current)) continue;
 
-            checked.Add(current);
+            checkedPositions.Add(current);
 
             string blockType = worldManager.GetBlockTypeAtPosition(current);
             if (IsOreBlock(blockType))
@@ -392,7 +392,7 @@ public class TurtleOreMiningManager : MonoBehaviour
 
                 foreach (Vector3 neighbor in neighbors)
                 {
-                    if (!checked.Contains(neighbor))
+                    if (!checkedPositions.Contains(neighbor))
                     {
                         toCheck.Enqueue(neighbor);
                     }
