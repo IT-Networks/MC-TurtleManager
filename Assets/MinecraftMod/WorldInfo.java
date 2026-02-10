@@ -40,6 +40,24 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Stores detailed information about a block update
+ */
+class BlockUpdateInfo {
+    public long timestamp;
+    public String action;  // "break" or "place"
+    public String blockType;
+    public int x, y, z;  // Block position
+
+    public BlockUpdateInfo(long timestamp, String action, String blockType, int x, int y, int z) {
+        this.timestamp = timestamp;
+        this.action = action;
+        this.blockType = blockType;
+        this.x = x;
+        this.y = y;
+        this.z = z;
+    }
+}
 
 @Mod(WorldInfo.MODID)
 public class WorldInfo {
@@ -50,6 +68,10 @@ public class WorldInfo {
 
     // Store chunk update timestamps: Map<Dimension, Map<ChunkPos, Timestamp>>
     private final Map<ResourceLocation, Map<Long, Long>> chunkUpdateTimestamps = new ConcurrentHashMap<>();
+
+    // Store detailed block update information: Map<Dimension, Map<ChunkPos, BlockUpdateInfo>>
+    private final Map<ResourceLocation, Map<Long, BlockUpdateInfo>> chunkBlockUpdates = new ConcurrentHashMap<>();
+
     private final Object saveLock = new Object();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private Path dataDirectory;
@@ -283,36 +305,143 @@ public class WorldInfo {
         return allBlocks;
     }
 
-    // Get buildable structures/components metadata
+    /**
+     * DYNAMIC BUILDABLES SYSTEM
+     * Automatically identifies buildable blocks from mods based on their properties:
+     * - Blocks with BlockEntities (machines, storage, etc.)
+     * - Functional blocks (crafting, processing, power generation)
+     * - Transport blocks (pipes, cables, conveyors)
+     *
+     * This replaces the hardcoded buildables list and works with any installed mods.
+     */
     private static Map<String, Object> getBuildables() {
         Map<String, Object> buildables = new LinkedHashMap<>();
 
-        // Functional buildables
-        List<Map<String, String>> functionalBuildables = new ArrayList<>();
-        functionalBuildables.add(createBuildable("Chest Storage", "minecraft:chest", "Storage unit for items"));
-        functionalBuildables.add(createBuildable("Furnace", "minecraft:furnace", "Smelting and cooking"));
-        functionalBuildables.add(createBuildable("Crafting Table", "minecraft:crafting_table", "3x3 crafting grid"));
-        functionalBuildables.add(createBuildable("Enchanting Table", "minecraft:enchanting_table", "Enchant items"));
-        buildables.put("functional", functionalBuildables);
+        // Categorize blocks dynamically
+        List<Map<String, String>> storage = new ArrayList<>();
+        List<Map<String, String>> crafting = new ArrayList<>();
+        List<Map<String, String>> power = new ArrayList<>();
+        List<Map<String, String>> processing = new ArrayList<>();
+        List<Map<String, String>> transport = new ArrayList<>();
+        List<Map<String, String>> logistics = new ArrayList<>();
 
-        // Create Mod buildables
-        List<Map<String, String>> createBuildables = new ArrayList<>();
-        createBuildables.add(createBuildable("Water Wheel Generator", "create:water_wheel", "Generates rotational power from water"));
-        createBuildables.add(createBuildable("Windmill", "create:windmill_bearing", "Generates power from wind"));
-        createBuildables.add(createBuildable("Mechanical Press", "create:mechanical_press", "Processes items"));
-        createBuildables.add(createBuildable("Mechanical Mixer", "create:mechanical_mixer", "Mixes ingredients"));
-        createBuildables.add(createBuildable("Crushing Wheel", "create:crushing_wheel", "Crushes ores and items"));
-        createBuildables.add(createBuildable("Item Vault", "create:item_vault", "Large storage container"));
-        buildables.put("create_mod", createBuildables);
+        // Iterate through all registered blocks
+        for (Block block : BuiltInRegistries.BLOCK) {
+            ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(block);
+            if (blockId == null) continue;
 
-        // Mekanism buildables
-        List<Map<String, String>> mekanismBuildables = new ArrayList<>();
-        mekanismBuildables.add(createBuildable("Logistical Transporter", "mekanism:logistical_transporter", "Item transport pipe"));
-        mekanismBuildables.add(createBuildable("Mechanical Pipe", "mekanism:mechanical_pipe", "Fluid transport"));
-        mekanismBuildables.add(createBuildable("Universal Cable", "mekanism:universal_cable", "Energy transfer"));
-        buildables.put("mekanism", mekanismBuildables);
+            String fullId = blockId.toString();
+            String namespace = blockId.getNamespace();
+            String path = blockId.getPath();
+
+            // Skip air and basic building materials
+            if (block == Blocks.AIR || block == Blocks.CAVE_AIR || block == Blocks.VOID_AIR) {
+                continue;
+            }
+
+            // Check if block has a BlockEntity (indicates it's functional/interactive)
+            boolean hasBlockEntity = block.defaultBlockState().hasBlockEntity();
+
+            // === IDENTIFY BUILDABLES BY CHARACTERISTICS ===
+
+            // 1. STORAGE - Blocks with inventories
+            if (hasBlockEntity && (path.contains("chest") || path.contains("barrel") ||
+                path.contains("vault") || path.contains("crate") || path.contains("storage") ||
+                path.contains("tank") && namespace.equals("create"))) {
+
+                String name = formatBlockName(path);
+                String description = getBlockDescription(path, "storage");
+                storage.add(createBuildable(name, fullId, description));
+            }
+
+            // 2. CRAFTING & PROCESSING - Interactive functional blocks
+            else if (hasBlockEntity && (path.contains("crafting") || path.contains("furnace") ||
+                path.contains("anvil") || path.contains("enchanting") || path.contains("press") ||
+                path.contains("mixer") || path.contains("millstone") || path.contains("crusher") ||
+                path.contains("infuser") || path.contains("chamber") || path.contains("smelter") ||
+                path.contains("saw") || path.contains("drill") || path.contains("basin"))) {
+
+                String name = formatBlockName(path);
+                String description = getBlockDescription(path, "processing");
+
+                if (path.contains("crafting") || path.contains("anvil") || path.contains("enchanting")) {
+                    crafting.add(createBuildable(name, fullId, description));
+                } else {
+                    processing.add(createBuildable(name, fullId, description));
+                }
+            }
+
+            // 3. POWER GENERATION - Create motors, wheels, generators
+            else if (hasBlockEntity && (path.contains("wheel") || path.contains("motor") ||
+                path.contains("generator") || path.contains("windmill") || path.contains("bearing") ||
+                path.contains("engine") || path.contains("dynamo") || path.contains("turbine"))) {
+
+                String name = formatBlockName(path);
+                String description = getBlockDescription(path, "power");
+                power.add(createBuildable(name, fullId, description));
+            }
+
+            // 4. TRANSPORT - Pipes, cables, conveyors (may or may not have BlockEntity)
+            else if (path.contains("pipe") || path.contains("cable") || path.contains("duct") ||
+                path.contains("transporter") || path.contains("conveyor") || path.contains("belt") ||
+                path.contains("tunnel") || path.contains("funnel") || path.contains("chute")) {
+
+                String name = formatBlockName(path);
+                String description = getBlockDescription(path, "transport");
+                transport.add(createBuildable(name, fullId, description));
+            }
+
+            // 5. LOGISTICS - Arms, deployers, harvesters, etc.
+            else if (hasBlockEntity && (path.contains("arm") || path.contains("deployer") ||
+                path.contains("harvester") || path.contains("plough") || path.contains("miner") ||
+                path.contains("gatherer") || path.contains("sower") || path.contains("placer"))) {
+
+                String name = formatBlockName(path);
+                String description = getBlockDescription(path, "logistics");
+                logistics.add(createBuildable(name, fullId, description));
+            }
+        }
+
+        // Only add non-empty categories
+        if (!storage.isEmpty()) buildables.put("storage", storage);
+        if (!crafting.isEmpty()) buildables.put("crafting", crafting);
+        if (!power.isEmpty()) buildables.put("power", power);
+        if (!processing.isEmpty()) buildables.put("processing", processing);
+        if (!transport.isEmpty()) buildables.put("transport", transport);
+        if (!logistics.isEmpty()) buildables.put("logistics", logistics);
+
+        // Log statistics
+        int totalBuildables = storage.size() + crafting.size() + power.size() +
+                             processing.size() + transport.size() + logistics.size();
+        System.out.println("Dynamically identified " + totalBuildables + " buildable blocks across " +
+                          buildables.size() + " categories");
 
         return buildables;
+    }
+
+    /**
+     * Format block path into readable name
+     * Example: "mechanical_press" -> "Mechanical Press"
+     */
+    private static String formatBlockName(String path) {
+        return Arrays.stream(path.split("_"))
+                    .map(word -> word.substring(0, 1).toUpperCase() + word.substring(1))
+                    .collect(Collectors.joining(" "));
+    }
+
+    /**
+     * Generate description based on block type and category
+     */
+    private static String getBlockDescription(String path, String category) {
+        return switch (category) {
+            case "storage" -> "Stores items" + (path.contains("tank") ? " or fluids" : "");
+            case "processing" -> "Processes and transforms items";
+            case "power" -> "Generates rotational or electrical power";
+            case "transport" -> "Transports " + (path.contains("cable") ? "energy" :
+                                                 path.contains("pipe") ? "fluids or items" : "items");
+            case "logistics" -> "Automated item/block interaction";
+            default -> "Functional block";
+        };
     }
 
     private static Map<String, String> createBuildable(String name, String blockId, String description) {
@@ -331,19 +460,29 @@ public class WorldInfo {
     }
     // Handle block breaks
 public void onBlockBreak(BlockEvent.BreakEvent event) {
-    updateChunkForBlockEvent(event);
+    updateChunkForBlockEvent(event, "break");
 }
 
 // Handle block placements
 public void onBlockPlace(BlockEvent.EntityPlaceEvent event) {
-    updateChunkForBlockEvent(event);
+    updateChunkForBlockEvent(event, "place");
 }
-private void updateChunkForBlockEvent(BlockEvent event) {
+
+private void updateChunkForBlockEvent(BlockEvent event, String action) {
     if (event.getLevel() instanceof ServerLevel level) {
         BlockPos pos = event.getPos();
+        BlockState state = event.getState();
+        String blockType = state.getBlock().builtInRegistryHolder().key().location().toString();
+
         int chunkX = pos.getX() >> 4;
         int chunkZ = pos.getZ() >> 4;
+
+        // Update timestamp
         updateChunkTimestamp(level.dimension().location(), chunkX, chunkZ);
+
+        // Store detailed block update information
+        updateBlockChangeInfo(level.dimension().location(), chunkX, chunkZ, action, blockType,
+                              pos.getX(), pos.getY(), pos.getZ());
     }
 }
 
@@ -371,9 +510,21 @@ private void updateChunkForBlockEvent(BlockEvent event) {
     private void updateChunkTimestamp(ResourceLocation dimension, int chunkX, int chunkZ) {
         long chunkKey = ((long) chunkX << 32) | (chunkZ & 0xFFFFFFFFL);
         long currentTime = System.currentTimeMillis();
-        
+
         chunkUpdateTimestamps.computeIfAbsent(dimension, k -> new ConcurrentHashMap<>())
                            .put(chunkKey, currentTime);
+    }
+
+    // Store detailed block update information
+    private void updateBlockChangeInfo(ResourceLocation dimension, int chunkX, int chunkZ,
+                                       String action, String blockType, int x, int y, int z) {
+        long chunkKey = ((long) chunkX << 32) | (chunkZ & 0xFFFFFFFFL);
+        long currentTime = System.currentTimeMillis();
+
+        BlockUpdateInfo updateInfo = new BlockUpdateInfo(currentTime, action, blockType, x, y, z);
+
+        chunkBlockUpdates.computeIfAbsent(dimension, k -> new ConcurrentHashMap<>())
+                        .put(chunkKey, updateInfo);
     }
 
     // Start periodic autosave
@@ -517,15 +668,31 @@ private void updateChunkForBlockEvent(BlockEvent event) {
             Long lastUpdate = chunkUpdateTimestamps.getOrDefault(dimension, Collections.emptyMap())
                                                 .get(chunkKey);
 
+            // Get detailed block update information
+            BlockUpdateInfo updateInfo = chunkBlockUpdates.getOrDefault(dimension, Collections.emptyMap())
+                                                          .get(chunkKey);
+
             JsonObject response = new JsonObject();
             response.addProperty("chunkX", chunkX);
             response.addProperty("chunkZ", chunkZ);
             response.addProperty("dimension", dimension.toString());
-            
+
             if (lastUpdate != null) {
                 response.addProperty("lastUpdate", lastUpdate);
                 response.addProperty("hasUpdates", true);
-                
+
+                // Add detailed block update information
+                if (updateInfo != null) {
+                    JsonObject updateDetails = new JsonObject();
+                    updateDetails.addProperty("action", updateInfo.action);
+                    updateDetails.addProperty("blockType", updateInfo.blockType);
+                    updateDetails.addProperty("x", updateInfo.x);
+                    updateDetails.addProperty("y", updateInfo.y);
+                    updateDetails.addProperty("z", updateInfo.z);
+                    updateDetails.addProperty("timestamp", updateInfo.timestamp);
+                    response.add("lastBlockUpdate", updateDetails);
+                }
+
                 if (sinceParam != null) {
                     try {
                         long sinceTime = Long.parseLong(sinceParam);
@@ -656,12 +823,24 @@ private void updateChunkForBlockEvent(BlockEvent event) {
     }
     private void resetChunkUpdateStatus(ResourceLocation dimension, int chunkX, int chunkZ) {
     long chunkKey = ((long) chunkX << 32) | (chunkZ & 0xFFFFFFFFL);
+
+    // Remove timestamp
     Map<Long, Long> dimensionChunks = chunkUpdateTimestamps.get(dimension);
     if (dimensionChunks != null) {
         dimensionChunks.remove(chunkKey);
         // Remove dimension entry if empty
         if (dimensionChunks.isEmpty()) {
             chunkUpdateTimestamps.remove(dimension);
+        }
+    }
+
+    // Remove block update details
+    Map<Long, BlockUpdateInfo> dimensionBlockUpdates = chunkBlockUpdates.get(dimension);
+    if (dimensionBlockUpdates != null) {
+        dimensionBlockUpdates.remove(chunkKey);
+        // Remove dimension entry if empty
+        if (dimensionBlockUpdates.isEmpty()) {
+            chunkBlockUpdates.remove(dimension);
         }
     }
 }
@@ -705,7 +884,7 @@ private void updateChunkForBlockEvent(BlockEvent event) {
                 BlockSnapshot blockSnapshot = BlockSnapshot.create(
                     level.dimension(),
                     level,
-                    pos                    
+                    pos
                 );
                 BlockEvent.EntityPlaceEvent event = new BlockEvent.EntityPlaceEvent(
                     blockSnapshot,
@@ -713,19 +892,22 @@ private void updateChunkForBlockEvent(BlockEvent event) {
                     null // no specific entity
                 );
                 onBlockPlace(event); // Trigger the place event handler
-                
+
             } else {
                 BlockEvent.BreakEvent event = new BlockEvent.BreakEvent(
                     level, pos, state, null
                 );
-                onBlockBreak(event); // Trigger the break event handler                
+                onBlockBreak(event); // Trigger the break event handler
             }
 
-            // Get the updated timestamp
+            // Get the updated timestamp and block update info
             ResourceLocation dimension = level.dimension().location();
             long chunkKey = ((long) chunkX << 32) | (chunkZ & 0xFFFFFFFFL);
             Long lastUpdate = chunkUpdateTimestamps.getOrDefault(dimension, Collections.emptyMap())
                                                 .get(chunkKey);
+
+            BlockUpdateInfo updateInfo = chunkBlockUpdates.getOrDefault(dimension, Collections.emptyMap())
+                                                          .get(chunkKey);
 
             JsonObject response = new JsonObject();
             response.addProperty("chunkX", chunkX);
@@ -735,6 +917,18 @@ private void updateChunkForBlockEvent(BlockEvent event) {
             response.addProperty("block", state.getBlock().getDescriptionId());
             response.addProperty("lastUpdate", lastUpdate != null ? lastUpdate : 0);
             response.addProperty("success", true);
+
+            // Add detailed block update information
+            if (updateInfo != null) {
+                JsonObject updateDetails = new JsonObject();
+                updateDetails.addProperty("action", updateInfo.action);
+                updateDetails.addProperty("blockType", updateInfo.blockType);
+                updateDetails.addProperty("x", updateInfo.x);
+                updateDetails.addProperty("y", updateInfo.y);
+                updateDetails.addProperty("z", updateInfo.z);
+                updateDetails.addProperty("timestamp", updateInfo.timestamp);
+                response.add("lastBlockUpdate", updateDetails);
+            }
 
             sendResponse(exchange, 200, response.toString());
         } catch (NumberFormatException e) {

@@ -307,7 +307,7 @@ public class LMStudioManager : MonoBehaviour
             case "down":
             case "left":
             case "right":
-                baseManager.QueueCommand(action);
+                baseManager.QueueCommand(new TurtleCommand(action));
                 break;
 
             // Mining
