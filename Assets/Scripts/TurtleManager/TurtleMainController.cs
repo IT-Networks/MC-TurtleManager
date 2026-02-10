@@ -419,6 +419,37 @@ public static class TurtleMainControllerExtensions
     }
 
     /// <summary>
+    /// Start mining with pre-validated and pre-optimized blocks (skips re-validation)
+    /// Use this when blocks have already been validated to avoid chunk-loading issues
+    /// </summary>
+    public static void StartPreValidatedMining(this TurtleMainController controller, List<Vector3> validatedBlocks)
+    {
+        if (validatedBlocks == null || validatedBlocks.Count == 0)
+        {
+            Debug.LogWarning("No blocks provided for pre-validated mining");
+            return;
+        }
+
+        if (controller.miningManager == null)
+        {
+            Debug.LogError("Cannot start mining - TurtleMiningManager not available");
+            return;
+        }
+
+        if (!controller.IsReady())
+        {
+            Debug.LogWarning("Cannot start mining - turtle system not ready");
+            return;
+        }
+
+        // Create defensive copy to prevent list modification issues
+        var blocksCopy = new List<Vector3>(validatedBlocks);
+
+        Debug.Log($"Starting pre-validated mining operation with {blocksCopy.Count} blocks");
+        controller.miningManager.StartPreValidatedMiningOperation(blocksCopy);
+    }
+
+    /// <summary>
     /// Check system readiness and log issues
     /// </summary>
     public static bool CheckSystemReadiness(this TurtleMainController controller)

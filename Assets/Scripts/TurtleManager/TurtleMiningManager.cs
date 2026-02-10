@@ -42,30 +42,56 @@ public class TurtleMiningManager : MonoBehaviour
     /// </summary>
     public void StartMiningOperation(List<Vector3> blockPositions)
     {
+        StartMiningOperationInternal(blockPositions, skipValidation: false);
+    }
+
+    /// <summary>
+    /// Start mining operation with pre-validated blocks (skips chunk validation)
+    /// Use this when blocks have already been validated to avoid chunk-loading race conditions
+    /// </summary>
+    public void StartPreValidatedMiningOperation(List<Vector3> validatedBlocks)
+    {
+        StartMiningOperationInternal(validatedBlocks, skipValidation: true);
+    }
+
+    /// <summary>
+    /// Internal mining operation starter with optional validation skip
+    /// </summary>
+    private void StartMiningOperationInternal(List<Vector3> blockPositions, bool skipValidation)
+    {
         if (operationManager.CurrentOperation != TurtleOperationManager.OperationType.None)
         {
             Debug.LogWarning("Cannot start mining - turtle is busy");
             return;
         }
 
-        // Filter out empty positions first
-        var solidBlocks = FilterSolidBlocks(blockPositions);
+        List<Vector3> blocksToMine = blockPositions;
 
-        if (solidBlocks.Count == 0)
+        // Filter out empty positions only if not already validated
+        if (!skipValidation)
         {
-            Debug.LogWarning("No solid blocks to mine in selection");
-            return;
+            blocksToMine = FilterSolidBlocks(blockPositions);
+
+            if (blocksToMine.Count == 0)
+            {
+                Debug.LogWarning("No solid blocks to mine in selection");
+                return;
+            }
+
+            Debug.Log($"Filtered selection: {blocksToMine.Count} solid blocks from {blockPositions.Count} total positions");
+        }
+        else
+        {
+            Debug.Log($"Using pre-validated blocks: {blocksToMine.Count} blocks (skipping chunk validation)");
         }
 
-        Debug.Log($"Filtered selection: {solidBlocks.Count} solid blocks from {blockPositions.Count} total positions");
-
-        var optimizedBlocks = solidBlocks;
+        var optimizedBlocks = blocksToMine;
 
         // Use column-based optimizer
         if (enableMiningOptimization && columnOptimizer != null)
         {
             Vector3 turtlePos = baseManager.GetTurtlePosition();
-            var columnPlan = columnOptimizer.OptimizeMining(solidBlocks, turtlePos);
+            var columnPlan = columnOptimizer.OptimizeMining(blocksToMine, turtlePos);
             optimizedBlocks = columnPlan.optimizedBlockOrder;
 
             Debug.Log($"Column-based mining plan: {columnPlan.totalColumns} columns, {columnPlan.totalBlocks} blocks");

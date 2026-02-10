@@ -145,6 +145,20 @@ public class TurtleSelectionManager : MonoBehaviour
     // Task assignment methods
     public void AssignMiningTask(List<Vector3> blocks)
     {
+        AssignMiningTaskInternal(blocks, skipValidation: false);
+    }
+
+    /// <summary>
+    /// Assign pre-validated mining task (skips chunk validation)
+    /// Use this when blocks have already been validated to avoid chunk-loading issues
+    /// </summary>
+    public void AssignPreValidatedMiningTask(List<Vector3> validatedBlocks)
+    {
+        AssignMiningTaskInternal(validatedBlocks, skipValidation: true);
+    }
+
+    private void AssignMiningTaskInternal(List<Vector3> blocks, bool skipValidation)
+    {
         if (selectedTurtles.Count == 0)
         {
             Debug.LogWarning("No turtles selected for mining task");
@@ -158,18 +172,22 @@ public class TurtleSelectionManager : MonoBehaviour
             var miningManager = turtle.GetComponent<TurtleMiningManager>();
             if (miningManager != null)
             {
-                miningManager.StartMiningOperation(blocks);
+                if (skipValidation)
+                    miningManager.StartPreValidatedMiningOperation(blocks);
+                else
+                    miningManager.StartMiningOperation(blocks);
+
                 turtle.SetBusy(true, TurtleOperationManager.OperationType.Mining);
             }
         }
         else
         {
             // Distribute blocks among selected turtles
-            DistributeBlocksAmongTurtles(blocks);
+            DistributeBlocksAmongTurtles(blocks, skipValidation);
         }
     }
 
-    private void DistributeBlocksAmongTurtles(List<Vector3> blocks)
+    private void DistributeBlocksAmongTurtles(List<Vector3> blocks, bool skipValidation = false)
     {
         int turtleCount = selectedTurtles.Count;
         int blocksPerTurtle = Mathf.CeilToInt(blocks.Count / (float)turtleCount);
@@ -186,7 +204,11 @@ public class TurtleSelectionManager : MonoBehaviour
                 var miningManager = turtle.GetComponent<TurtleMiningManager>();
                 if (miningManager != null)
                 {
-                    miningManager.StartMiningOperation(turtleBlocks);
+                    if (skipValidation)
+                        miningManager.StartPreValidatedMiningOperation(turtleBlocks);
+                    else
+                        miningManager.StartMiningOperation(turtleBlocks);
+
                     turtle.SetBusy(true, TurtleOperationManager.OperationType.Mining);
                     Debug.Log($"{turtle.turtleName} assigned {turtleBlocks.Count} blocks");
                 }

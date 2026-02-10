@@ -387,10 +387,19 @@ public class AreaSelectionManager : MonoBehaviour
     
     private void ExecuteOptimizedMining()
     {
+        // CRITICAL: Create defensive copy BEFORE any operations
+        // This prevents issues with list being cleared or chunks being unloaded
         List<Vector3> blocksToMine = previewOptimization && optimizedOrder.Count > 0 ?
-                                     optimizedOrder : validBlocks;
+                                     new List<Vector3>(optimizedOrder) :
+                                     new List<Vector3>(validBlocks);
 
-        Debug.Log($"Executing mining operation: {blocksToMine.Count} blocks");
+        if (blocksToMine.Count == 0)
+        {
+            Debug.LogWarning("No blocks to mine - list is empty at execution time");
+            return;
+        }
+
+        Debug.Log($"Executing mining operation: {blocksToMine.Count} blocks (defensive copy created)");
 
         // Create simple work area visualization
         CreateWorkAreaVisualization(blocksToMine, SelectionMode.Mining);
@@ -398,14 +407,17 @@ public class AreaSelectionManager : MonoBehaviour
         // Use TurtleSelectionManager if available (multi-turtle support)
         if (turtleSelectionManager != null && turtleSelectionManager.HasSelection())
         {
-            turtleSelectionManager.AssignMiningTask(blocksToMine);
-            Debug.Log($"Mining task assigned to {turtleSelectionManager.GetSelectionCount()} selected turtle(s)");
+            // Use pre-validated assignment to skip redundant chunk checks
+            turtleSelectionManager.AssignPreValidatedMiningTask(blocksToMine);
+            Debug.Log($"Mining task assigned to {turtleSelectionManager.GetSelectionCount()} selected turtle(s) (pre-validated)");
         }
         // Fallback to single turtle controller
         else if (turtleMainController != null)
         {
-            turtleMainController.StartOptimizedMining(blocksToMine);
-            Debug.Log("Mining task assigned to default turtle");
+            // Use pre-validated mining to skip redundant chunk checks
+            // Blocks have already been validated in ValidateSelectionWithNewSystem()
+            turtleMainController.StartPreValidatedMining(blocksToMine);
+            Debug.Log("Mining task assigned to default turtle (pre-validated)");
         }
         else
         {
