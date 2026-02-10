@@ -326,8 +326,35 @@ public class TurtleWorldManager : MonoBehaviour
             // Check if chunk already exists (prevents ArgumentException)
             if (_loadedChunks.ContainsKey(coord))
             {
-                Debug.LogWarning($"Chunk {coord} already exists in _loadedChunks, skipping duplicate creation");
-                continue;
+                var existingChunk = _loadedChunks[coord];
+
+                // Prüfe ob der existierende Chunk auch wirklich vollständig geladen ist
+                if (existingChunk != null && existingChunk.IsLoaded && existingChunk._go != null && existingChunk.VertexCount > 0)
+                {
+                    // Chunk ist OK, überspringen
+                    Debug.Log($"Chunk {coord} already exists and is properly loaded, skipping");
+                    continue;
+                }
+                else
+                {
+                    // Chunk ist fehlerhaft oder unvollständig, entfernen und neu laden
+                    Debug.LogWarning($"Chunk {coord} exists but is not properly loaded (IsLoaded: {existingChunk?.IsLoaded}, VertexCount: {existingChunk?.VertexCount}), replacing it");
+
+                    if (existingChunk != null)
+                    {
+                        if (useChunkPooling && _chunkPool != null)
+                        {
+                            existingChunk.ReturnToPool(_chunkPool);
+                        }
+                        else
+                        {
+                            existingChunk.DestroyChunk();
+                        }
+                    }
+
+                    _loadedChunks.Remove(coord);
+                    // Fahre fort mit dem Laden des neuen Chunks
+                }
             }
 
             var chunk = new ChunkManager(coord, chunkSize, this);

@@ -298,23 +298,54 @@ public class TurtleMiningManager : MonoBehaviour
             return false;
         }
 
+        // Detaillierte Debug-Informationen zur Chunk-Berechnung
+        int chunkSize = baseManager.worldManager.chunkSize;
+        int chunkX = Mathf.FloorToInt(-blockPosition.x / chunkSize);
+        int chunkZ = Mathf.FloorToInt(blockPosition.z / chunkSize);
+        Vector2Int expectedChunkCoord = new Vector2Int(chunkX, chunkZ);
+
         var chunk = baseManager.worldManager.GetChunkContaining(blockPosition);
         if (chunk == null)
         {
             Debug.LogWarning($"Chunk not found for block at {blockPosition}");
+            Debug.LogWarning($"  Expected chunk coordinates: {expectedChunkCoord} (chunkX={chunkX}, chunkZ={chunkZ})");
+            Debug.LogWarning($"  Block position: x={blockPosition.x}, y={blockPosition.y}, z={blockPosition.z}");
+            Debug.LogWarning($"  Chunk size: {chunkSize}");
+
+            // Liste geladene Chunks in der Nähe auf
+            var loadedChunks = baseManager.worldManager.GetLoadedChunkCoordinates();
+            var nearbyChunks = new System.Collections.Generic.List<Vector2Int>();
+            foreach (var coord in loadedChunks)
+            {
+                if (Vector2Int.Distance(coord, expectedChunkCoord) <= 2)
+                {
+                    nearbyChunks.Add(coord);
+                }
+            }
+
+            if (nearbyChunks.Count > 0)
+            {
+                Debug.LogWarning($"  Nearby loaded chunks: {string.Join(", ", nearbyChunks)}");
+            }
+            else
+            {
+                Debug.LogWarning($"  No loaded chunks nearby. Total loaded chunks: {loadedChunks.Count()}");
+            }
+
             return false;
         }
 
         if (!chunk.IsLoaded)
         {
-            Debug.LogWarning($"Chunk not loaded for block at {blockPosition}");
+            Debug.LogWarning($"Chunk {chunk.coord} not fully loaded for block at {blockPosition}");
+            Debug.LogWarning($"  Chunk IsLoaded: {chunk.IsLoaded}, VertexCount: {chunk.VertexCount}");
             return false;
         }
 
         var chunkInfo = chunk.GetChunkInfo();
         if (chunkInfo == null)
         {
-            Debug.LogWarning($"ChunkInfo is null for block at {blockPosition}");
+            Debug.LogWarning($"ChunkInfo is null for chunk {chunk.coord}, block at {blockPosition}");
             return false;
         }
 
@@ -322,7 +353,8 @@ public class TurtleMiningManager : MonoBehaviour
 
         if (string.IsNullOrEmpty(blockType))
         {
-            Debug.LogWarning($"Block type is empty at {blockPosition}");
+            Debug.LogWarning($"Block type is empty at {blockPosition} in chunk {chunk.coord}");
+            Debug.LogWarning($"  Chunk has {chunkInfo.BlockCount} blocks total");
             return false;
         }
 
