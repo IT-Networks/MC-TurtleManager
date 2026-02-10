@@ -7,11 +7,15 @@ using UnityEngine;
 /// Manages mining operations. Groups blocks into vertical columns and mines them
 /// top-down to minimize pathfinding calls. Uses A*/NavMesh pathfinding via
 /// TurtleMovementManager for navigation between columns.
+///
+/// Blocks that can't be reached (all neighbors solid) are deferred and retried
+/// after surrounding blocks have been mined, creating air spaces.
 /// </summary>
 public class TurtleMiningManager : MonoBehaviour
 {
     [Header("Mining Settings")]
     public float miningPositionTolerance = 0.1f;
+    public int maxRetryPasses = 3;
 
     private TurtleBaseManager baseManager;
     private TurtleMovementManager movementManager;
@@ -74,46 +78,91 @@ public class TurtleMiningManager : MonoBehaviour
     private IEnumerator ExecuteMiningOperation(List<Vector3> blocks)
     {
         isMining = true;
-        Vector3 lastBlock = Vector3.zero;
+        var remaining = new List<Vector3>(blocks);
+        var minedChunks = new HashSet<Vector2Int>();
 
-        for (int i = 0; i < blocks.Count; i++)
+        for (int pass = 0; pass < maxRetryPasses && remaining.Count > 0; pass++)
         {
-            Vector3 blockPos = blocks[i];
-            bool sameColumn = i > 0 && IsSameColumn(lastBlock, blockPos);
+            if (pass > 0)
+            {
+                // Regenerate meshes for chunks modified in previous pass
+                // so deferred blocks can see updated air positions
+                RegenerateMinedChunks(minedChunks);
+                minedChunks.Clear();
 
-            if (sameColumn)
-            {
-                // Same column - just dig without repositioning
-                yield return StartCoroutine(ExecuteDig(blockPos));
-            }
-            else
-            {
-                // New column - navigate to adjacent position first
-                yield return StartCoroutine(MineWithPositioning(blockPos));
+                remaining = OptimizeByColumns(remaining);
+                Debug.Log($"Retry pass {pass + 1}: {remaining.Count} deferred blocks");
             }
 
-            lastBlock = blockPos;
-            operationManager.IncrementProcessed();
-            yield return new WaitUntil(() => !baseManager.IsBusy);
-            yield return new WaitForSeconds(1.5f);
+            var deferred = new List<Vector3>();
+            Vector3 lastBlock = Vector3.zero;
+            bool skipColumn = false;
+
+            for (int i = 0; i < remaining.Count; i++)
+            {
+                Vector3 blockPos = remaining[i];
+                bool sameColumn = i > 0 && IsSameColumn(lastBlock, blockPos);
+
+                // If first block of column was unreachable, defer rest of column too
+                if (sameColumn && skipColumn)
+                {
+                    deferred.Add(blockPos);
+                    continue;
+                }
+
+                skipColumn = false;
+
+                if (sameColumn)
+                {
+                    yield return StartCoroutine(ExecuteDig(blockPos));
+                }
+                else
+                {
+                    Vector3 miningPos = movementManager.GetBestAdjacentPosition(blockPos);
+
+                    if (miningPos == Vector3.zero)
+                    {
+                        deferred.Add(blockPos);
+                        skipColumn = true;
+                        continue;
+                    }
+
+                    yield return StartCoroutine(NavigateAndDig(blockPos, miningPos));
+                }
+
+                // Track which chunks were modified
+                TrackMinedChunk(blockPos, minedChunks);
+
+                lastBlock = blockPos;
+                operationManager.IncrementProcessed();
+                yield return new WaitUntil(() => !baseManager.IsBusy);
+                yield return new WaitForSeconds(1.5f);
+            }
+
+            if (deferred.Count == 0)
+                break;
+
+            if (deferred.Count == remaining.Count)
+            {
+                Debug.LogWarning($"{deferred.Count} blocks unreachable - no adjacent air positions available");
+                for (int j = 0; j < deferred.Count; j++)
+                    operationManager.IncrementFailed();
+                break;
+            }
+
+            remaining = deferred;
         }
+
+        // Final mesh regeneration for all modified chunks
+        RegenerateMinedChunks(minedChunks);
 
         isMining = false;
         operationManager.CompleteOperation();
         Debug.Log("Mining operation completed");
     }
 
-    private IEnumerator MineWithPositioning(Vector3 blockPosition)
+    private IEnumerator NavigateAndDig(Vector3 blockPosition, Vector3 miningPosition)
     {
-        Vector3 miningPosition = movementManager.GetBestAdjacentPosition(blockPosition);
-
-        if (miningPosition == Vector3.zero)
-        {
-            Debug.LogWarning($"No valid mining position for block at {blockPosition}");
-            operationManager.IncrementFailed();
-            yield break;
-        }
-
         yield return StartCoroutine(movementManager.MoveTurtleToExactPosition(miningPosition));
 
         Vector3 currentPos = baseManager.GetTurtlePosition();
@@ -153,10 +202,42 @@ public class TurtleMiningManager : MonoBehaviour
 
         yield return new WaitUntil(() => !baseManager.IsBusy);
 
-        // Update world state
-        var chunk = baseManager.worldManager?.GetChunkContaining(blockPosition);
-        chunk?.GetChunkInfo()?.RemoveBlockAt(blockPosition);
-        baseManager.worldManager?.RemoveBlockAtWorldPosition(blockPosition);
+        // Update world state: remove block from ChunkInfo so pathfinding
+        // knows this position is now air. Single lookup, no mesh regeneration
+        // per block (too expensive during batch mining).
+        var worldManager = baseManager.worldManager;
+        if (worldManager != null)
+        {
+            var chunk = worldManager.GetChunkContaining(blockPosition);
+            if (chunk != null)
+            {
+                chunk.GetChunkInfo()?.RemoveBlockAt(blockPosition);
+            }
+        }
+    }
+
+    private void TrackMinedChunk(Vector3 blockPosition, HashSet<Vector2Int> minedChunks)
+    {
+        var worldManager = baseManager.worldManager;
+        if (worldManager != null)
+        {
+            minedChunks.Add(worldManager.WorldPositionToChunkCoord(blockPosition));
+        }
+    }
+
+    private void RegenerateMinedChunks(HashSet<Vector2Int> chunkCoords)
+    {
+        var worldManager = baseManager.worldManager;
+        if (worldManager == null) return;
+
+        foreach (var coord in chunkCoords)
+        {
+            var chunk = worldManager.GetChunkManager(coord);
+            if (chunk != null && chunk.IsLoaded)
+            {
+                chunk.RegenerateMesh();
+            }
+        }
     }
 
     #endregion

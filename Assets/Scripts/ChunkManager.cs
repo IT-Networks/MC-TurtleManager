@@ -486,6 +486,16 @@ public class ChunkManager
     }
 
     /// <summary>
+    /// Triggers mesh regeneration from current ChunkInfo data.
+    /// Used after batch block removal (e.g. mining) to update visuals.
+    /// </summary>
+    public void RegenerateMesh(int batchVerticesPerFrame = 10000)
+    {
+        if (currentMeshData == null || isRegenerating) return;
+        CoroutineHelper.Instance.StartCoroutine(RegenerateMeshCoroutine(batchVerticesPerFrame));
+    }
+
+    /// <summary>
     /// Regeneriert den Mesh basierend auf den aktuellen Mesh-Daten
     /// </summary>
     private IEnumerator RegenerateMeshCoroutine(int batchVerticesPerFrame)
