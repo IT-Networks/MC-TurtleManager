@@ -3,12 +3,16 @@ package com.worldinfo.worldinfomod;
 import com.google.gson.*;
 import com.google.gson.reflect.TypeToken;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.neoforged.fml.common.Mod;
@@ -43,7 +47,7 @@ public class WorldInfo {
     private static MinecraftServer server;
     private HttpServer httpServer;
     private ScheduledExecutorService autoSaveExecutor;
-    
+
     // Store chunk update timestamps: Map<Dimension, Map<ChunkPos, Timestamp>>
     private final Map<ResourceLocation, Map<Long, Long>> chunkUpdateTimestamps = new ConcurrentHashMap<>();
     private final Object saveLock = new Object();
@@ -51,7 +55,273 @@ public class WorldInfo {
     private Path dataDirectory;
     private static final String TIMESTAMPS_FILE = "chunk_timestamps.json";
     private static final long SAVE_INTERVAL_MINUTES = 1;
-    
+
+    // Cached JSON responses for blocks and buildables (performance optimization)
+    private static String cachedBlocksJson = null;
+    private static String cachedBuildablesJson = null;
+    private static String cachedBlockCategoriesJson = null;
+
+    // ===== DYNAMIC BLOCK LIBRARY - Central Source of Truth =====
+    // Blocks are now read dynamically from Minecraft's Block Registry
+    // This automatically includes all blocks from Minecraft, Create, and installed mods
+
+    // Cached block data (invalidated on server restart)
+    private static Map<String, List<String>> cachedBlockCategories = null;
+    private static List<String> cachedAllBlocks = null;
+
+    /**
+     * Dynamically loads all blocks from Minecraft's Block Registry
+     * Categorizes blocks based on their namespace and naming patterns
+     * @return Map of category names to lists of block IDs
+     */
+    private static Map<String, List<String>> getBlockCategories() {
+        if (cachedBlockCategories != null) {
+            return cachedBlockCategories;
+        }
+
+        Map<String, List<String>> categories = new LinkedHashMap<>();
+
+        // Lists for dynamic categorization
+        List<String> stoneBlocks = new ArrayList<>();
+        List<String> woodBlocks = new ArrayList<>();
+        List<String> glassBlocks = new ArrayList<>();
+        List<String> concreteBlocks = new ArrayList<>();
+        List<String> woolBlocks = new ArrayList<>();
+        List<String> slabs = new ArrayList<>();
+        List<String> stairs = new ArrayList<>();
+        List<String> fences = new ArrayList<>();
+        List<String> doors = new ArrayList<>();
+        List<String> storage = new ArrayList<>();
+        List<String> lighting = new ArrayList<>();
+        List<String> createKinetic = new ArrayList<>();
+        List<String> createGenerators = new ArrayList<>();
+        List<String> createLogistics = new ArrayList<>();
+        List<String> createProcessing = new ArrayList<>();
+        List<String> createStorage = new ArrayList<>();
+        List<String> pipez = new ArrayList<>();
+        List<String> mekanism = new ArrayList<>();
+        List<String> thermal = new ArrayList<>();
+        List<String> decorative = new ArrayList<>();
+        List<String> other = new ArrayList<>();
+
+        // Iterate through all registered blocks
+        for (Block block : BuiltInRegistries.BLOCK) {
+            ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(block);
+            if (blockId == null) continue;
+
+            String fullId = blockId.toString();
+            String namespace = blockId.getNamespace();
+            String path = blockId.getPath();
+
+            // Skip air and technical blocks
+            if (block == Blocks.AIR || block == Blocks.CAVE_AIR || block == Blocks.VOID_AIR) {
+                continue;
+            }
+            if (path.contains("potted_") || path.contains("wall_") && path.contains("_banner")) {
+                continue;
+            }
+
+            // Categorize by namespace and name patterns
+            if (namespace.equals("minecraft")) {
+                // Stone & Bricks
+                if (path.contains("stone") && !path.contains("_slab") && !path.contains("_stairs")
+                    || path.contains("brick") && !path.contains("_slab") && !path.contains("_stairs")
+                    || path.contains("andesite") || path.contains("diorite") || path.contains("granite")
+                    || path.contains("deepslate") || path.equals("cobblestone")) {
+                    stoneBlocks.add(fullId);
+                }
+                // Wood & Planks
+                else if (path.contains("planks") || path.contains("_log") || path.contains("_stem")
+                         || path.contains("stripped_")) {
+                    woodBlocks.add(fullId);
+                }
+                // Glass
+                else if (path.contains("glass") || path.contains("_pane")) {
+                    glassBlocks.add(fullId);
+                }
+                // Concrete & Terracotta
+                else if (path.contains("concrete") || path.contains("terracotta")) {
+                    concreteBlocks.add(fullId);
+                }
+                // Wool
+                else if (path.contains("wool") || path.contains("carpet")) {
+                    woolBlocks.add(fullId);
+                }
+                // Slabs
+                else if (path.contains("_slab")) {
+                    slabs.add(fullId);
+                }
+                // Stairs
+                else if (path.contains("_stairs")) {
+                    stairs.add(fullId);
+                }
+                // Fences & Walls
+                else if (path.contains("fence") || path.contains("_wall") && !path.contains("banner")) {
+                    fences.add(fullId);
+                }
+                // Doors & Gates
+                else if (path.contains("door") || path.contains("gate") || path.contains("trapdoor")) {
+                    doors.add(fullId);
+                }
+                // Storage & Crafting
+                else if (path.contains("chest") || path.contains("barrel") || path.contains("crafting")
+                         || path.contains("furnace") || path.contains("anvil") || path.contains("enchanting")
+                         || path.contains("bookshelf") || path.contains("lectern")) {
+                    storage.add(fullId);
+                }
+                // Lighting
+                else if (path.contains("torch") || path.contains("lantern") || path.contains("glowstone")
+                         || path.contains("sea_lantern") || path.contains("shroomlight") || path.contains("end_rod")
+                         || path.contains("redstone_lamp")) {
+                    lighting.add(fullId);
+                }
+                // Decorative
+                else if (path.contains("_banner") || path.contains("carpet") || path.contains("bed")) {
+                    decorative.add(fullId);
+                }
+                else {
+                    other.add(fullId);
+                }
+            }
+            // Create Mod
+            else if (namespace.equals("create")) {
+                if (path.contains("cogwheel") || path.contains("shaft") || path.contains("gearbox")
+                    || path.contains("gearshift") || path.contains("clutch") || path.contains("chain_drive")
+                    || path.contains("speed_controller")) {
+                    createKinetic.add(fullId);
+                }
+                else if (path.contains("water_wheel") || path.contains("windmill") || path.contains("bearing")
+                         || path.contains("motor") || path.contains("engine")) {
+                    createGenerators.add(fullId);
+                }
+                else if (path.contains("arm") || path.contains("deployer") || path.contains("drill")
+                         || path.contains("saw") || path.contains("harvester") || path.contains("plough")
+                         || path.contains("funnel") || path.contains("tunnel")) {
+                    createLogistics.add(fullId);
+                }
+                else if (path.contains("millstone") || path.contains("crushing") || path.contains("press")
+                         || path.contains("mixer") || path.contains("blaze_burner") || path.contains("basin")
+                         || path.contains("drain") || path.contains("spout") || path.contains("fan")) {
+                    createProcessing.add(fullId);
+                }
+                else if (path.contains("vault") || path.contains("tank") || path.contains("chute")
+                         || path.contains("pulley")) {
+                    createStorage.add(fullId);
+                }
+                else {
+                    other.add(fullId);
+                }
+            }
+            // Pipez Mod
+            else if (namespace.equals("pipez")) {
+                pipez.add(fullId);
+            }
+            // Mekanism Mod
+            else if (namespace.equals("mekanism")) {
+                mekanism.add(fullId);
+            }
+            // Thermal Mod
+            else if (namespace.equals("thermal")) {
+                thermal.add(fullId);
+            }
+            // Other mods
+            else {
+                other.add(fullId);
+            }
+        }
+
+        // Only add non-empty categories
+        if (!stoneBlocks.isEmpty()) categories.put("Stone & Bricks", stoneBlocks);
+        if (!woodBlocks.isEmpty()) categories.put("Wood & Planks", woodBlocks);
+        if (!glassBlocks.isEmpty()) categories.put("Glass & Transparent", glassBlocks);
+        if (!concreteBlocks.isEmpty()) categories.put("Concrete & Terracotta", concreteBlocks);
+        if (!woolBlocks.isEmpty()) categories.put("Wool & Carpet", woolBlocks);
+        if (!slabs.isEmpty()) categories.put("Slabs", slabs);
+        if (!stairs.isEmpty()) categories.put("Stairs", stairs);
+        if (!fences.isEmpty()) categories.put("Fences & Walls", fences);
+        if (!doors.isEmpty()) categories.put("Doors & Gates", doors);
+        if (!storage.isEmpty()) categories.put("Storage & Crafting", storage);
+        if (!lighting.isEmpty()) categories.put("Lighting", lighting);
+        if (!createKinetic.isEmpty()) categories.put("Create: Kinetic Power", createKinetic);
+        if (!createGenerators.isEmpty()) categories.put("Create: Generators & Motors", createGenerators);
+        if (!createLogistics.isEmpty()) categories.put("Create: Logistics", createLogistics);
+        if (!createProcessing.isEmpty()) categories.put("Create: Processing", createProcessing);
+        if (!createStorage.isEmpty()) categories.put("Create: Storage & Containers", createStorage);
+        if (!pipez.isEmpty()) categories.put("Pipez: Transport", pipez);
+        if (!mekanism.isEmpty()) categories.put("Mekanism: Machines & Pipes", mekanism);
+        if (!thermal.isEmpty()) categories.put("Thermal: Ducts & Machines", thermal);
+        if (!decorative.isEmpty()) categories.put("Decorative", decorative);
+        if (!other.isEmpty()) categories.put("Other", other);
+
+        // Cache the result
+        cachedBlockCategories = categories;
+
+        // Log statistics
+        int totalBlocks = categories.values().stream().mapToInt(List::size).sum();
+        System.out.println("Loaded " + totalBlocks + " blocks from registry into " + categories.size() + " categories");
+
+        return categories;
+    }
+
+    /**
+     * Get all blocks as flat list (performance-optimized with lazy caching)
+     * @return List of all block IDs from the registry
+     */
+    private static List<String> getAllBlocks() {
+        if (cachedAllBlocks != null) {
+            return cachedAllBlocks;
+        }
+
+        List<String> allBlocks = new ArrayList<>();
+        Map<String, List<String>> categories = getBlockCategories();
+        for (List<String> categoryBlocks : categories.values()) {
+            allBlocks.addAll(categoryBlocks);
+        }
+
+        // Cache the result
+        cachedAllBlocks = allBlocks;
+        return allBlocks;
+    }
+
+    // Get buildable structures/components metadata
+    private static Map<String, Object> getBuildables() {
+        Map<String, Object> buildables = new LinkedHashMap<>();
+
+        // Functional buildables
+        List<Map<String, String>> functionalBuildables = new ArrayList<>();
+        functionalBuildables.add(createBuildable("Chest Storage", "minecraft:chest", "Storage unit for items"));
+        functionalBuildables.add(createBuildable("Furnace", "minecraft:furnace", "Smelting and cooking"));
+        functionalBuildables.add(createBuildable("Crafting Table", "minecraft:crafting_table", "3x3 crafting grid"));
+        functionalBuildables.add(createBuildable("Enchanting Table", "minecraft:enchanting_table", "Enchant items"));
+        buildables.put("functional", functionalBuildables);
+
+        // Create Mod buildables
+        List<Map<String, String>> createBuildables = new ArrayList<>();
+        createBuildables.add(createBuildable("Water Wheel Generator", "create:water_wheel", "Generates rotational power from water"));
+        createBuildables.add(createBuildable("Windmill", "create:windmill_bearing", "Generates power from wind"));
+        createBuildables.add(createBuildable("Mechanical Press", "create:mechanical_press", "Processes items"));
+        createBuildables.add(createBuildable("Mechanical Mixer", "create:mechanical_mixer", "Mixes ingredients"));
+        createBuildables.add(createBuildable("Crushing Wheel", "create:crushing_wheel", "Crushes ores and items"));
+        createBuildables.add(createBuildable("Item Vault", "create:item_vault", "Large storage container"));
+        buildables.put("create_mod", createBuildables);
+
+        // Mekanism buildables
+        List<Map<String, String>> mekanismBuildables = new ArrayList<>();
+        mekanismBuildables.add(createBuildable("Logistical Transporter", "mekanism:logistical_transporter", "Item transport pipe"));
+        mekanismBuildables.add(createBuildable("Mechanical Pipe", "mekanism:mechanical_pipe", "Fluid transport"));
+        mekanismBuildables.add(createBuildable("Universal Cable", "mekanism:universal_cable", "Energy transfer"));
+        buildables.put("mekanism", mekanismBuildables);
+
+        return buildables;
+    }
+
+    private static Map<String, String> createBuildable(String name, String blockId, String description) {
+        Map<String, String> buildable = new LinkedHashMap<>();
+        buildable.put("name", name);
+        buildable.put("blockId", blockId);
+        buildable.put("description", description);
+        return buildable;
+    }
 
     public WorldInfo() {
         IEventBus bus = net.neoforged.neoforge.common.NeoForge.EVENT_BUS;
@@ -200,10 +470,18 @@ private void updateChunkForBlockEvent(BlockEvent event) {
             httpServer = HttpServer.create(new InetSocketAddress(4567), 0);
             httpServer.createContext("/chunkdata", new ChunkDataHandler());
             httpServer.createContext("/dimensions", new DimensionsHandler());
-            httpServer.createContext("/chunkupdate", new ChunkUpdateHandler()); 
+            httpServer.createContext("/chunkupdate", new ChunkUpdateHandler());
             httpServer.createContext("/triggerupdate", new TriggerUpdateHandler());
+
+            // NEW: Block library endpoints
+            httpServer.createContext("/blocks", new BlocksHandler());
+            httpServer.createContext("/blocks/categories", new BlockCategoriesHandler());
+            httpServer.createContext("/buildables", new BuildablesHandler());
+
             httpServer.setExecutor(Executors.newFixedThreadPool(threads));
             httpServer.start();
+            System.out.println("WorldInfo HTTP Server started on port 4567");
+            System.out.println("Available endpoints: /chunkdata, /dimensions, /chunkupdate, /triggerupdate, /blocks, /blocks/categories, /buildables");
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -524,6 +802,145 @@ private void updateChunkForBlockEvent(BlockEvent event) {
         exchange.sendResponseHeaders(statusCode, bytes.length);
         try (OutputStream os = exchange.getResponseBody()) {
             os.write(bytes);
+        }
+    }
+
+    // ===== NEW HANDLERS FOR BLOCK LIBRARY =====
+
+    /**
+     * Handler for /blocks endpoint
+     * Returns a flat list of all available blocks
+     * Performance: Uses cached JSON response
+     */
+    private class BlocksHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendResponse(exchange, 405, "{\"error\":\"Method Not Allowed\"}");
+                return;
+            }
+
+            // Use cached response if available (performance optimization)
+            if (cachedBlocksJson == null) {
+                synchronized (WorldInfo.class) {
+                    if (cachedBlocksJson == null) {
+                        JsonObject response = new JsonObject();
+                        JsonArray blocksArray = new JsonArray();
+
+                        List<String> allBlocks = getAllBlocks();
+                        for (String block : allBlocks) {
+                            blocksArray.add(block);
+                        }
+
+                        response.addProperty("count", allBlocks.size());
+                        response.add("blocks", blocksArray);
+                        response.addProperty("source", "WorldInfo Mod");
+                        response.addProperty("version", "1.0");
+
+                        cachedBlocksJson = response.toString();
+                        System.out.println("Generated cached blocks JSON (" + allBlocks.size() + " blocks)");
+                    }
+                }
+            }
+
+            sendResponse(exchange, 200, cachedBlocksJson);
+        }
+    }
+
+    /**
+     * Handler for /blocks/categories endpoint
+     * Returns blocks organized by category
+     * Performance: Uses cached JSON response
+     */
+    private class BlockCategoriesHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendResponse(exchange, 405, "{\"error\":\"Method Not Allowed\"}");
+                return;
+            }
+
+            // Use cached response if available (performance optimization)
+            if (cachedBlockCategoriesJson == null) {
+                synchronized (WorldInfo.class) {
+                    if (cachedBlockCategoriesJson == null) {
+                        JsonObject response = new JsonObject();
+                        JsonObject categoriesObj = new JsonObject();
+
+                        Map<String, List<String>> blockCategories = getBlockCategories();
+                        int totalBlocks = 0;
+                        for (Map.Entry<String, List<String>> entry : blockCategories.entrySet()) {
+                            JsonArray blocksArray = new JsonArray();
+                            for (String block : entry.getValue()) {
+                                blocksArray.add(block);
+                            }
+                            categoriesObj.add(entry.getKey(), blocksArray);
+                            totalBlocks += entry.getValue().size();
+                        }
+
+                        response.add("categories", categoriesObj);
+                        response.addProperty("totalCategories", blockCategories.size());
+                        response.addProperty("totalBlocks", totalBlocks);
+                        response.addProperty("source", "WorldInfo Mod - Dynamic Registry");
+                        response.addProperty("version", "2.0");
+
+                        cachedBlockCategoriesJson = response.toString();
+                        System.out.println("Generated cached block categories JSON (" + blockCategories.size() + " categories, " + totalBlocks + " blocks)");
+                    }
+                }
+            }
+
+            sendResponse(exchange, 200, cachedBlockCategoriesJson);
+        }
+    }
+
+    /**
+     * Handler for /buildables endpoint
+     * Returns buildable structures and components with metadata
+     * Performance: Uses cached JSON response
+     */
+    private class BuildablesHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendResponse(exchange, 405, "{\"error\":\"Method Not Allowed\"}");
+                return;
+            }
+
+            // Use cached response if available (performance optimization)
+            if (cachedBuildablesJson == null) {
+                synchronized (WorldInfo.class) {
+                    if (cachedBuildablesJson == null) {
+                        Map<String, Object> buildables = getBuildables();
+
+                        JsonObject response = new JsonObject();
+
+                        // Convert buildables map to JSON
+                        for (Map.Entry<String, Object> entry : buildables.entrySet()) {
+                            @SuppressWarnings("unchecked")
+                            List<Map<String, String>> items = (List<Map<String, String>>) entry.getValue();
+
+                            JsonArray itemsArray = new JsonArray();
+                            for (Map<String, String> item : items) {
+                                JsonObject itemObj = new JsonObject();
+                                itemObj.addProperty("name", item.get("name"));
+                                itemObj.addProperty("blockId", item.get("blockId"));
+                                itemObj.addProperty("description", item.get("description"));
+                                itemsArray.add(itemObj);
+                            }
+                            response.add(entry.getKey(), itemsArray);
+                        }
+
+                        response.addProperty("source", "WorldInfo Mod");
+                        response.addProperty("version", "1.0");
+
+                        cachedBuildablesJson = response.toString();
+                        System.out.println("Generated cached buildables JSON");
+                    }
+                }
+            }
+
+            sendResponse(exchange, 200, cachedBuildablesJson);
         }
     }
 }

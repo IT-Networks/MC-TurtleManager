@@ -109,6 +109,37 @@ function getEquippedTool()
     return {left = toolLeft, right = toolRight}
 end
 
+-- Get unique block types currently in turtle's inventory
+function getInventoryBlockTypes()
+    local blockTypes = {}
+    local seen = {}
+
+    for slot = 1, 16 do
+        local detail = turtle.getItemDetail(slot)
+        if detail and not seen[detail.name] then
+            table.insert(blockTypes, {
+                name = detail.name,
+                totalCount = detail.count
+            })
+            seen[detail.name] = true
+        end
+    end
+
+    return blockTypes
+end
+
+-- Count total blocks of a specific type in inventory
+function countBlocksInInventory(blockName)
+    local total = 0
+    for slot = 1, 16 do
+        local detail = turtle.getItemDetail(slot)
+        if detail and detail.name == blockName then
+            total = total + detail.count
+        end
+    end
+    return total
+end
+
 function reportStatus()
     local status = {
         position = pos,
@@ -122,6 +153,7 @@ function reportStatus()
         inventory = getInventoryStatus(),
         equippedToolRight = peripheral.getType("right") or "none",
         equippedToolLeft = peripheral.getType("left") or "none",
+        inventoryBlocks = getInventoryBlockTypes(), -- Blocks currently in inventory (for AI context)
     }
     local json = textutils.serializeJSON(status)
     http.post(SERVER_STATUS_URL, json, {["Content-Type"] = "application/json"})
@@ -294,6 +326,7 @@ end
 print("Initialisiere GPS...")
 getDirection()
 getPosition()
+
 reportStatus()
 print("Starte Turtle Control...")
 print("Waiting for commands from Unity...")

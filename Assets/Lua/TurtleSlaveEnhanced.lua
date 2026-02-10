@@ -2,6 +2,7 @@
 local SERVER_COMMAND_URL = "http://192.168.178.211:4999/command"
 local SERVER_REPORT_URL  = "http://192.168.178.211:4999/report"
 local SERVER_STATUS_URL  = "http://192.168.178.211:4999/status"
+local WORLDINFO_BLOCKS_URL = "http://192.168.178.211:4567/blocks"  -- NEW: WorldInfo block library endpoint
 local SLEEP_TIME         = 0.5
 local GEOSCANNER_SLOT    = 1
 
@@ -63,6 +64,9 @@ local validFuelItems = {
     ["minecraft:coal_block"] = true,
     ["minecraft:blaze_rod"] = true,
 }
+
+-- Available blocks - loaded dynamically from WorldInfo mod
+local AVAILABLE_BLOCKS = nil  -- Will be loaded from server on startup
 
 -- Ore mining state
 local detectedOres = {}
@@ -143,6 +147,74 @@ function getEquippedTool()
     return {left = toolLeft, right = toolRight}
 end
 
+-- Load available blocks from WorldInfo server
+function loadAvailableBlocks()
+    print("Loading available blocks from WorldInfo server...")
+    local ok, res = pcall(http.get, WORLDINFO_BLOCKS_URL)
+    if ok and res then
+        local body = res.readAll()
+        res.close()
+        local success, data = pcall(textutils.unserializeJSON, body)
+        if success and data and data.blocks then
+            AVAILABLE_BLOCKS = data.blocks
+            print("Loaded " .. #AVAILABLE_BLOCKS .. " blocks from WorldInfo server")
+            return true
+        end
+    end
+    print("WARNING: Failed to load blocks from WorldInfo server, using empty list")
+    AVAILABLE_BLOCKS = {}
+    return false
+end
+
+-- Get all available blocks (comprehensive list)
+function getAllAvailableBlocks()
+    -- Lazy load blocks if not yet loaded
+    if AVAILABLE_BLOCKS == nil then
+        loadAvailableBlocks()
+    end
+    return AVAILABLE_BLOCKS
+end
+
+-- Get unique block types currently in turtle's inventory
+function getInventoryBlockTypes()
+    local blockTypes = {}
+    local seen = {}
+
+    for slot = 1, 16 do
+        local detail = turtle.getItemDetail(slot)
+        if detail and not seen[detail.name] then
+            -- Count total of this block type across all slots
+            local totalCount = 0
+            for s = 1, 16 do
+                local d = turtle.getItemDetail(s)
+                if d and d.name == detail.name then
+                    totalCount = totalCount + d.count
+                end
+            end
+
+            table.insert(blockTypes, {
+                name = detail.name,
+                totalCount = totalCount
+            })
+            seen[detail.name] = true
+        end
+    end
+
+    return blockTypes
+end
+
+-- Count total blocks of a specific type in inventory
+function countBlocksInInventory(blockName)
+    local total = 0
+    for slot = 1, 16 do
+        local detail = turtle.getItemDetail(slot)
+        if detail and detail.name == blockName then
+            total = total + detail.count
+        end
+    end
+    return total
+end
+
 function reportStatus()
     local status = {
         position = pos,
@@ -158,6 +230,9 @@ function reportStatus()
         equippedToolLeft = peripheral.getType("left") or "none",
         autoOreMining = AUTO_ORE_MINING,
         detectedOres = #detectedOres,
+        -- NEW: Available blocks information
+        availableBlocks = getAllAvailableBlocks(),  -- Complete list of known blocks
+        inventoryBlocks = getInventoryBlockTypes(), -- Blocks currently in inventory
     }
     local json = textutils.serializeJSON(status)
     http.post(SERVER_STATUS_URL, json, {["Content-Type"] = "application/json"})
@@ -491,6 +566,10 @@ end
 print("Initialisiere GPS...")
 getDirection()
 getPosition()
+
+print("Lade Block-Bibliothek von WorldInfo...")
+loadAvailableBlocks()
+
 reportStatus()
 print("Starte Enhanced Turtle Control...")
 print("Auto Ore Mining: " .. tostring(AUTO_ORE_MINING))
