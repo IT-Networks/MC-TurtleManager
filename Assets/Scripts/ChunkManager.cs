@@ -543,7 +543,10 @@ public class ChunkManager
     private Vector3Int WorldToLocalPosition(Vector3 worldPosition)
     {
         int localX = Mathf.FloorToInt(-worldPosition.x) - (coord.x * chunkSize);
-        int localY = Mathf.FloorToInt(worldPosition.y);
+        // KRITISCHER FIX: Y-Offset von 128 hinzufügen wie in ChunkMeshData.WorldToLocalPosition
+        // Unity-Weltkoordinaten: Y=0 entspricht Minecraft Y=-128
+        // ChunkMeshBuilder speichert Blöcke mit y-128 in ChunkInfo
+        int localY = Mathf.FloorToInt(worldPosition.y + 128);
         int localZ = Mathf.FloorToInt(worldPosition.z) - (coord.y * chunkSize);
 
         return new Vector3Int(localX, localY, localZ);

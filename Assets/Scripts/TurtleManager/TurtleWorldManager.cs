@@ -323,11 +323,37 @@ public class TurtleWorldManager : MonoBehaviour
             }
 
             // Create new ChunkManager (no longer MonoBehaviour)
+            // Check if chunk already exists (prevents ArgumentException)
+            if (_loadedChunks.ContainsKey(coord))
+            {
+                Debug.LogWarning($"Chunk {coord} already exists in _loadedChunks, skipping duplicate creation");
+                continue;
+            }
+
             var chunk = new ChunkManager(coord, chunkSize, this);
             _loadedChunks.Add(coord, chunk);
 
             // Load chunk data
             yield return StartCoroutine(chunk.LoadAndSpawnChunk());
+
+            // WICHTIG: Entferne Chunk wenn Laden fehlgeschlagen ist (kein Mesh)
+            // Dies verhindert leere Chunk-GameObjects ohne Mesh
+            if (!chunk.IsLoaded || chunk._go == null || chunk.VertexCount == 0)
+            {
+                Debug.LogWarning($"Chunk {coord} failed to load properly (IsLoaded: {chunk.IsLoaded}, VertexCount: {chunk.VertexCount}), removing from loaded chunks");
+
+                // Cleanup und Entfernung
+                if (useChunkPooling && _chunkPool != null)
+                {
+                    chunk.ReturnToPool(_chunkPool);
+                }
+                else
+                {
+                    chunk.DestroyChunk();
+                }
+
+                _loadedChunks.Remove(coord);
+            }
         }
 
         _isLoadingChunks = false;
