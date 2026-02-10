@@ -679,7 +679,13 @@ public class TurtleMovementManager : MonoBehaviour
         if (baseManager.worldManager == null) return true;
 
         var chunk = baseManager.worldManager.GetChunkContaining(position);
-        if (chunk == null || !chunk.IsLoaded) return false;
+        if (chunk == null || !chunk.IsLoaded)
+        {
+            // Chunk not loaded (camera looking elsewhere) - assume accessible
+            // rather than blocking the operation. Pathfinder will validate the actual path.
+            Debug.LogWarning($"IsPositionAccessible: chunk not loaded for {position}, assuming accessible");
+            return true;
+        }
 
         var chunkInfo = chunk.GetChunkInfo();
         if (chunkInfo == null) return true;
