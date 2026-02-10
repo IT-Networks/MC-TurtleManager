@@ -44,7 +44,7 @@ public class ChunkInfo : MonoBehaviour
     public BlockInfo GetBlockAt(Vector3 worldPosition)
     {
         Vector3Int key = Vector3Int.FloorToInt(worldPosition);
-        key.y -= 128; // Normalize y to chunk base level
+        // No Y normalization needed - AddBlock() uses direct world position
         blockLookup.TryGetValue(key, out BlockInfo blockInfo);
         return blockInfo;
     }
