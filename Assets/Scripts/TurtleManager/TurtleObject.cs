@@ -26,6 +26,12 @@ public class TurtleObject : MonoBehaviour
     public bool isBusy = false;
     public TurtleOperationManager.OperationType currentOperation = TurtleOperationManager.OperationType.None;
 
+    // Computed properties for compatibility with managers
+    public int fuelLevel => currentStatus?.fuel ?? 0;
+    public int maxFuel => 20000; // Standard turtle fuel limit in ComputerCraft
+    public int inventorySlotsUsed => 0; // TODO: Implement inventory tracking
+    public List<InventoryItem> inventory => new List<InventoryItem>(); // TODO: Implement inventory
+
     [Header("Movement")]
     public float movementSpeed = 3f; // Units per second
     public float rotationSpeed = 360f; // Degrees per second
@@ -410,4 +416,12 @@ public class TurtleStatus
     public string direction;
     public int fuel;
     public string status;
+}
+
+[System.Serializable]
+public class InventoryItem
+{
+    public string name;
+    public int count;
+    public int slot;
 }

@@ -19,7 +19,7 @@ public class TurtleOreMiningManager : MonoBehaviour
     public TurtleMovementManager movementManager;
     public TurtleMiningManager miningManager;
     public TurtleInventoryManager inventoryManager;
-    public WorldManager worldManager;
+    public TurtleWorldManager worldManager;
 
     [Header("Ore Detection Settings")]
     public bool autoDetectOres = true;
@@ -133,7 +133,7 @@ public class TurtleOreMiningManager : MonoBehaviour
     {
         if (worldManager == null)
         {
-            worldManager = FindObjectOfType<WorldManager>();
+            worldManager = FindObjectOfType<TurtleWorldManager>();
             if (worldManager == null) return;
         }
 
@@ -143,18 +143,22 @@ public class TurtleOreMiningManager : MonoBehaviour
         // Get all blocks in scan radius
         List<Vector3> nearbyBlocks = GetBlocksInRadius(turtlePos, scanRadius);
 
-        foreach (Vector3 blockPos in nearbyBlocks)
-        {
-            // Skip already mined positions
-            if (minedPositions.Contains(blockPos)) continue;
+        // TODO: Implement block scanning using ChunkManager
+        // TurtleWorldManager doesn't have GetBlockTypeAtPosition method
+        // This functionality needs to be implemented to scan for ores
 
-            // Check if block is an ore
-            string blockType = worldManager.GetBlockTypeAtPosition(blockPos);
-            if (IsOreBlock(blockType))
-            {
-                detectedOres.Add(blockPos);
-            }
-        }
+        // foreach (Vector3 blockPos in nearbyBlocks)
+        // {
+        //     // Skip already mined positions
+        //     if (minedPositions.Contains(blockPos)) continue;
+        //
+        //     // Check if block is an ore
+        //     string blockType = worldManager.GetBlockTypeAtPosition(blockPos);
+        //     if (IsOreBlock(blockType))
+        //     {
+        //         detectedOres.Add(blockPos);
+        //     }
+        // }
 
         if (detectedOres.Count > 0 && debugMode)
         {
@@ -216,11 +220,12 @@ public class TurtleOreMiningManager : MonoBehaviour
         // Sort ores by priority if enabled
         if (prioritizeRareOres)
         {
-            detectedOres = detectedOres.OrderByDescending(pos =>
-            {
-                string blockType = worldManager.GetBlockTypeAtPosition(pos);
-                return GetOrePriority(blockType);
-            }).ToList();
+            // TODO: Implement block type checking for ore prioritization
+            // detectedOres = detectedOres.OrderByDescending(pos =>
+            // {
+            //     string blockType = worldManager.GetBlockTypeAtPosition(pos);
+            //     return GetOrePriority(blockType);
+            // }).ToList();
         }
 
         if (debugMode) Debug.Log($"[{turtle.turtleName}] Starting ore mining operation for {detectedOres.Count} ores");
@@ -258,7 +263,7 @@ public class TurtleOreMiningManager : MonoBehaviour
         if (returnToStartAfterMining && movementManager != null)
         {
             if (debugMode) Debug.Log($"[{turtle.turtleName}] Returning to start position");
-            yield return StartCoroutine(movementManager.MoveTo(startPosition));
+            yield return StartCoroutine(movementManager.MoveTurtleToExactPosition(startPosition));
         }
 
         detectedOres.Clear();
@@ -284,33 +289,34 @@ public class TurtleOreMiningManager : MonoBehaviour
             Vector3 direction = waypoint - currentPos;
 
             // Dig if there's a block in the way
-            if (worldManager != null && worldManager.GetBlockTypeAtPosition(waypoint) != "minecraft:air")
+            // TODO: Implement block type checking
+            // For now, always try to dig when moving
             {
                 // Determine dig direction
                 if (direction.y > 0)
-                    baseManager.QueueCommand("digup");
+                    baseManager.QueueCommand(new TurtleCommand("digup"));
                 else if (direction.y < 0)
-                    baseManager.QueueCommand("digdown");
+                    baseManager.QueueCommand(new TurtleCommand("digdown"));
                 else
-                    baseManager.QueueCommand("dig");
+                    baseManager.QueueCommand(new TurtleCommand("dig"));
 
                 yield return new WaitForSeconds(0.5f);
             }
 
             // Move in direction
             if (direction.y > 0)
-                baseManager.QueueCommand("up");
+                baseManager.QueueCommand(new TurtleCommand("up"));
             else if (direction.y < 0)
-                baseManager.QueueCommand("down");
+                baseManager.QueueCommand(new TurtleCommand("down"));
             else if (direction.z > 0 || direction.x > 0 || direction.z < 0 || direction.x < 0)
-                baseManager.QueueCommand("forward");
+                baseManager.QueueCommand(new TurtleCommand("forward"));
 
             currentPos = waypoint;
             yield return new WaitForSeconds(0.3f);
         }
 
         // Mine the ore block itself
-        baseManager.QueueCommand("dig");
+        baseManager.QueueCommand(new TurtleCommand("dig"));
         yield return new WaitForSeconds(0.5f);
     }
 
@@ -375,8 +381,10 @@ public class TurtleOreMiningManager : MonoBehaviour
 
             checkedPositions.Add(current);
 
-            string blockType = worldManager.GetBlockTypeAtPosition(current);
-            if (IsOreBlock(blockType))
+            // TODO: Implement block type checking for vein detection
+            // string blockType = worldManager.GetBlockTypeAtPosition(current);
+            // if (IsOreBlock(blockType))
+            // For now, just add the position
             {
                 vein.Add(current);
 

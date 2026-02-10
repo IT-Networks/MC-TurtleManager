@@ -114,12 +114,12 @@ public class TurtleInventoryManager : MonoBehaviour
         {
             if (current.y < to.y)
             {
-                baseManager.QueueCommand("up");
+                baseManager.QueueCommand(new TurtleCommand("up"));
                 current += Vector3.up;
             }
             else
             {
-                baseManager.QueueCommand("down");
+                baseManager.QueueCommand(new TurtleCommand("down"));
                 current += Vector3.down;
             }
             yield return new WaitForSeconds(0.3f);
@@ -129,7 +129,7 @@ public class TurtleInventoryManager : MonoBehaviour
         while (current.x != to.x)
         {
             // Rotate turtle to face the correct direction and move forward
-            baseManager.QueueCommand("forward");
+            baseManager.QueueCommand(new TurtleCommand("forward"));
             if (current.x < to.x)
                 current += Vector3.right;
             else
@@ -140,7 +140,7 @@ public class TurtleInventoryManager : MonoBehaviour
         // Move along Z axis
         while (current.z != to.z)
         {
-            baseManager.QueueCommand("forward");
+            baseManager.QueueCommand(new TurtleCommand("forward"));
             if (current.z < to.z)
                 current += Vector3.forward;
             else
@@ -159,7 +159,7 @@ public class TurtleInventoryManager : MonoBehaviour
 
         // Send command to drop all non-fuel items into chest below
         // The turtle should be positioned above the chest
-        baseManager.QueueCommand("dropdown"); // drops all non-fuel items
+        baseManager.QueueCommand(new TurtleCommand("dropdown")); // drops all non-fuel items
         yield return new WaitForSeconds(1.0f);
 
         if (debugMode) Debug.Log($"[{turtle.turtleName}] Items stored in chest");
@@ -197,7 +197,7 @@ public class TurtleInventoryManager : MonoBehaviour
         if (debugMode) Debug.Log($"[{turtle.turtleName}] Starting refuel process");
 
         // Send refuel command - turtle will try to refuel from inventory
-        baseManager.QueueCommand("refuel:64");
+        baseManager.QueueCommand(new TurtleCommand("refuel:64"));
         yield return new WaitForSeconds(1.0f);
 
         // If still low on fuel after 2 seconds, try to get fuel from chest
@@ -220,11 +220,11 @@ public class TurtleInventoryManager : MonoBehaviour
         yield return StartCoroutine(SendNavigationCommands(turtle.transform.position, chestPosition));
 
         // Take fuel from chest (turtle is above chest)
-        baseManager.QueueCommand("suckdown");
+        baseManager.QueueCommand(new TurtleCommand("suckdown"));
         yield return new WaitForSeconds(0.5f);
 
         // Refuel
-        baseManager.QueueCommand("refuel:64");
+        baseManager.QueueCommand(new TurtleCommand("refuel:64"));
         yield return new WaitForSeconds(0.5f);
 
         // Return to original position
