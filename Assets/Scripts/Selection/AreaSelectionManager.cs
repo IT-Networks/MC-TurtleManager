@@ -248,6 +248,12 @@ public class AreaSelectionManager : MonoBehaviour
         validBlocks.Clear();
         invalidBlocks.Clear();
 
+        // Prüfe zuerst ob die benötigten Chunks geladen sind
+        if (currentMode == SelectionMode.Mining && selectedBlocks.Count > 0)
+        {
+            CheckRequiredChunksLoaded(selectedBlocks);
+        }
+
         if (currentMode == SelectionMode.Mining && turtleMainController != null)
         {
             validBlocks.AddRange(turtleMainController.ValidateMiningBlocks(selectedBlocks));
@@ -269,6 +275,59 @@ public class AreaSelectionManager : MonoBehaviour
         }
 
         Debug.Log($"Block validation: {selectedBlocks.Count} total, {validBlocks.Count} valid, {invalidBlocks.Count} invalid");
+    }
+
+    /// <summary>
+    /// Prüft ob alle benötigten Chunks für die Block-Liste geladen sind
+    /// </summary>
+    private void CheckRequiredChunksLoaded(List<Vector3> blocks)
+    {
+        if (turtleMainController == null || turtleMainController.worldManager == null)
+            return;
+
+        var worldManager = turtleMainController.worldManager;
+        var requiredChunks = new HashSet<Vector2Int>();
+
+        // Sammle alle benötigten Chunks
+        foreach (var blockPos in blocks)
+        {
+            Vector2Int chunkCoord = worldManager.WorldPositionToChunkCoord(blockPos);
+            requiredChunks.Add(chunkCoord);
+        }
+
+        // Prüfe welche Chunks nicht geladen sind
+        var missingChunks = new List<Vector2Int>();
+        var unloadedChunks = new List<Vector2Int>();
+
+        foreach (var chunkCoord in requiredChunks)
+        {
+            var chunk = worldManager.GetChunkAt(chunkCoord);
+            if (chunk == null)
+            {
+                missingChunks.Add(chunkCoord);
+            }
+            else if (!chunk.IsLoaded || chunk.VertexCount == 0)
+            {
+                unloadedChunks.Add(chunkCoord);
+            }
+        }
+
+        if (missingChunks.Count > 0)
+        {
+            Debug.LogWarning($"Selection validation: {missingChunks.Count} required chunks are not loaded: {string.Join(", ", missingChunks)}");
+            Debug.LogWarning($"  This may cause blocks to be filtered out as unmineable");
+            Debug.LogWarning($"  Try moving the camera closer to the selected area to load the chunks");
+        }
+
+        if (unloadedChunks.Count > 0)
+        {
+            Debug.LogWarning($"Selection validation: {unloadedChunks.Count} required chunks exist but are not fully loaded: {string.Join(", ", unloadedChunks)}");
+        }
+
+        if (missingChunks.Count == 0 && unloadedChunks.Count == 0)
+        {
+            Debug.Log($"Selection validation: All {requiredChunks.Count} required chunks are loaded");
+        }
     }
     
     private void OptimizeSelectionWithNewSystem()
@@ -492,6 +551,8 @@ public class AreaSelectionManager : MonoBehaviour
     
     private Vector3 GetBlockPosition(Vector3 worldPosition)
     {
+        // Block-Positionen müssen konsistent mit der Chunk-Logik berechnet werden
+        // Verwende Floor um sicherzustellen dass wir immer die untere linke Ecke des Blocks bekommen
         return new Vector3(
             Mathf.Floor(worldPosition.x),
             Mathf.Floor(worldPosition.y),
