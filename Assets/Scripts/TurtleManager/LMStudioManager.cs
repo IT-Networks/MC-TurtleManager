@@ -20,9 +20,6 @@ public class LMStudioManager : MonoBehaviour
     [SerializeField] private bool enableAutoPrompts = true;
     [SerializeField] private float promptInterval = 5f;
 
-    [Header("World Reference")]
-    [SerializeField] private TurtleWorldManager worldManager;
-
     [Header("Turtle References")]
     [SerializeField] private TurtleBaseManager turtleBaseManager;
 
@@ -31,21 +28,15 @@ public class LMStudioManager : MonoBehaviour
 
     private void Start()
     {
-        // Initialize world manager reference
-        if (worldManager == null)
-        {
-            worldManager = FindFirstObjectByType<TurtleWorldManager>();
-        }
-
-        if (worldManager == null)
-        {
-            Debug.LogError("LMStudioManager: TurtleWorldManager not found!");
-        }
-
         // Initialize turtle base manager
         if (turtleBaseManager == null)
         {
             turtleBaseManager = GetComponent<TurtleBaseManager>() ?? FindFirstObjectByType<TurtleBaseManager>();
+        }
+
+        if (turtleBaseManager == null)
+        {
+            Debug.LogError("LMStudioManager: TurtleBaseManager not found!");
         }
 
         if (enableAutoPrompts)
@@ -111,7 +102,7 @@ public class LMStudioManager : MonoBehaviour
         {
             yield return new WaitForSeconds(promptInterval);
 
-            if (!isProcessingRequest && worldManager != null && turtleBaseManager != null)
+            if (!isProcessingRequest && turtleBaseManager != null)
             {
                 // Generiere automatischen Prompt basierend auf aktuellem Status
                 string autoPrompt = GenerateContextAwarePrompt();
@@ -122,7 +113,22 @@ public class LMStudioManager : MonoBehaviour
 
     private string GenerateContextAwarePrompt()
     {
-        // Beispiel-Prompt basierend auf Weltkontext
+        // Get current turtle status
+        if (turtleBaseManager != null)
+        {
+            var status = turtleBaseManager.GetCurrentStatus();
+            if (status != null)
+            {
+                string prompt = $"Turtle Status:\n" +
+                               $"Position: {status.position.x}, {status.position.y}, {status.position.z}\n" +
+                               $"Direction: {status.direction}\n" +
+                               $"Fuel Level: {status.fuelLevel}\n" +
+                               $"Busy: {status.isBusy}\n\n" +
+                               $"What should the turtle do next?";
+                return prompt;
+            }
+        }
+
         return "What should the turtle do next?";
     }
 

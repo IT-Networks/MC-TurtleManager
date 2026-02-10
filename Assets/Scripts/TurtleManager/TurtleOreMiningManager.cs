@@ -12,9 +12,6 @@ public class TurtleOreMiningManager : TurtleBaseManager
     [SerializeField] private int tunnelSpacing = 3;
     [SerializeField] private bool returnToSurface = true;
 
-    [Header("World Reference")]
-    [SerializeField] private TurtleWorldManager worldManager;
-
     [Header("Ore Detection")]
     [SerializeField] private string[] targetOres = { "diamond_ore", "iron_ore", "gold_ore", "copper_ore" };
 
@@ -24,17 +21,6 @@ public class TurtleOreMiningManager : TurtleBaseManager
     protected override void Start()
     {
         base.Start();
-
-        // Initialize world manager reference
-        if (worldManager == null)
-        {
-            worldManager = GetComponent<TurtleWorldManager>() ?? FindFirstObjectByType<TurtleWorldManager>();
-        }
-
-        if (worldManager == null)
-        {
-            Debug.LogError("TurtleOreMiningManager: TurtleWorldManager not found!");
-        }
     }
 
     /// <summary>
@@ -84,5 +70,23 @@ public class TurtleOreMiningManager : TurtleBaseManager
     public bool IsMiningActive()
     {
         return isMiningOperation;
+    }
+
+    /// <summary>
+    /// Überprüft ob genug Fuel für Mining vorhanden ist
+    /// </summary>
+    public bool HasSufficientFuel(int requiredFuel)
+    {
+        var status = GetCurrentStatus();
+        return status != null && status.fuelLevel >= requiredFuel;
+    }
+
+    /// <summary>
+    /// Gibt den aktuellen Fuel-Level zurück
+    /// </summary>
+    public int GetCurrentFuelLevel()
+    {
+        var status = GetCurrentStatus();
+        return status?.fuelLevel ?? 0;
     }
 }
