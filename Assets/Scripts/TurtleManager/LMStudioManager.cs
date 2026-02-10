@@ -1,6 +1,8 @@
 using UnityEngine;
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using UnityEngine.Networking;
 
@@ -42,7 +44,7 @@ public class LMStudioManager : MonoBehaviour
     public TurtleObject turtle;
     public TurtleBaseManager baseManager;
     public TurtleInventoryManager inventoryManager;
-    public WorldManager worldManager;
+    public TurtleWorldManager worldManager;
 
     [Header("AI Behavior")]
     public bool enableAIControl = false;
@@ -187,28 +189,10 @@ public class LMStudioManager : MonoBehaviour
     /// </summary>
     private List<string> ScanNearbyOres(float radius)
     {
-        List<string> ores = new HashSet<string>().ToList();
-        Vector3 turtlePos = turtle.transform.position;
-
-        int r = Mathf.CeilToInt(radius);
-        for (int x = -r; x <= r; x++)
-        {
-            for (int y = -r; y <= r; y++)
-            {
-                for (int z = -r; z <= r; z++)
-                {
-                    Vector3 checkPos = turtlePos + new Vector3(x, y, z);
-                    string blockType = worldManager.GetBlockTypeAtPosition(checkPos);
-
-                    if (blockType != null && blockType.Contains("ore") && !ores.Contains(blockType))
-                    {
-                        ores.Add(blockType.Replace("minecraft:", "").Replace("_", " "));
-                    }
-                }
-            }
-        }
-
-        return ores;
+        // TODO: Implement block scanning using ChunkManager
+        // TurtleWorldManager doesn't have GetBlockTypeAtPosition method
+        // This would require integrating with ChunkManager to get block data
+        return new List<string>();
     }
 
     /// <summary>
@@ -330,21 +314,21 @@ public class LMStudioManager : MonoBehaviour
             case "mine":
                 if (allowMining)
                 {
-                    baseManager.QueueCommand("dig");
+                    baseManager.QueueCommand(new TurtleCommand("dig"));
                 }
                 break;
 
             case "mine_up":
                 if (allowMining)
                 {
-                    baseManager.QueueCommand("digup");
+                    baseManager.QueueCommand(new TurtleCommand("digup"));
                 }
                 break;
 
             case "mine_down":
                 if (allowMining)
                 {
-                    baseManager.QueueCommand("digdown");
+                    baseManager.QueueCommand(new TurtleCommand("digdown"));
                 }
                 break;
 
@@ -365,7 +349,7 @@ public class LMStudioManager : MonoBehaviour
 
             // Utility
             case "scan":
-                baseManager.QueueCommand("scan");
+                baseManager.QueueCommand(new TurtleCommand("scan"));
                 break;
 
             case "wait":
@@ -671,7 +655,7 @@ You are the brain, turtle is the body.";
             if (autoBuildGeneratedStructures && buildingManager != null && turtle != null)
             {
                 Vector3 buildPosition = turtle.transform.position;
-                buildingManager.BuildStructureAtPosition(structure, buildPosition);
+                buildingManager.StartBuildingOperation(buildPosition, structure);
                 Debug.Log($"[AI] Auto-building structure at {buildPosition}");
             }
         }

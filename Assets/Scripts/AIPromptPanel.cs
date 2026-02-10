@@ -155,7 +155,7 @@ public class AIPromptPanel : MonoBehaviour
         }
 
         Vector3 buildPosition = selectedTurtle.transform.position;
-        buildingManager.BuildStructureAtPosition(lastGeneratedStructure, buildPosition);
+        buildingManager.StartBuildingOperation(buildPosition, lastGeneratedStructure);
 
         UpdateStatus($"Building '{lastGeneratedStructure.name}' at {buildPosition}", Color.green);
     }
