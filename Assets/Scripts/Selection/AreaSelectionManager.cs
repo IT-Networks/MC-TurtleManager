@@ -222,19 +222,31 @@ public class AreaSelectionManager : MonoBehaviour
     private void FinishSelection()
     {
         if (!selectionStart.HasValue || !selectionEnd.HasValue) return;
-        
+
         selectedBlocks.Clear();
         selectedBlocks.AddRange(GetBlocksInSelection(selectionStart.Value, selectionEnd.Value));
-        
+
+        Debug.Log($"=== SELECTION FINISHED ===");
+        Debug.Log($"Selection bounds: start={selectionStart.Value}, end={selectionEnd.Value}");
+        Debug.Log($"Total blocks in selection: {selectedBlocks.Count}");
+
+        if (selectedBlocks.Count > 0)
+        {
+            // Log first and last block for verification
+            Debug.Log($"First block: {selectedBlocks[0]}");
+            if (selectedBlocks.Count > 1)
+                Debug.Log($"Last block: {selectedBlocks[selectedBlocks.Count - 1]}");
+        }
+
         ValidateSelectionWithNewSystem();
         OptimizeSelectionWithNewSystem();
         UpdateSelectionStats();
-        
+
         Debug.Log($"Selected {selectedBlocks.Count} blocks for {currentMode}");
         OnAreaSelected?.Invoke(selectedBlocks, currentMode);
-        
+
         CreateVisualization();
-        
+
         selectionStart = null;
         selectionEnd = null;
     }
@@ -540,24 +552,31 @@ public class AreaSelectionManager : MonoBehaviour
     private Vector3? GetWorldPositionFromMouse()
     {
         Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-        
+
         if (Physics.Raycast(ray, out RaycastHit hit, raycastDistance, selectionLayerMask))
         {
-            return hit.point;
+            // CRITICAL FIX: Adjust hit point using normal to ensure we're inside the block
+            // When raycasting hits a block face, hit.point is exactly on the surface
+            // We need to move slightly inward to ensure Floor() calculates the correct block
+            Vector3 adjustedPoint = hit.point - hit.normal * 0.01f;
+
+            return adjustedPoint;
         }
-        
+
         return null;
     }
-    
+
     private Vector3 GetBlockPosition(Vector3 worldPosition)
     {
         // Block-Positionen müssen konsistent mit der Chunk-Logik berechnet werden
         // Verwende Floor um sicherzustellen dass wir immer die untere linke Ecke des Blocks bekommen
-        return new Vector3(
+        Vector3 blockPos = new Vector3(
             Mathf.Floor(worldPosition.x),
             Mathf.Floor(worldPosition.y),
             Mathf.Floor(worldPosition.z)
         );
+
+        return blockPos;
     }
     
     private List<Vector3> GetBlocksInSelection(Vector3 start, Vector3 end)
