@@ -41,15 +41,17 @@ public class ChunkMeshBuilder
                     if (!submeshes.TryGetValue(blockName, out var sb))
                         submeshes[blockName] = sb = new SubmeshBuild();
 
-                    Vector3 worldPos = new Vector3(
-                        -(data.coord.x * data.chunkSize + x),
-                        y,
-                        data.coord.y * data.chunkSize + z);
-
-                    // Store block positions for later ChunkInfo update (on main thread)
+                    // KRITISCHER FIX: Y-Offset konsistent mit ChunkMeshData
+                    // blockGrid Index y wird zu Unity-Weltkoordinaten konvertiert: y - 128
+                    // Dies stellt sicher, dass Mesh-Position und ChunkInfo-Position übereinstimmen
                     float wx = -(data.coord.x * data.chunkSize + x);
+                    float wy = y - 128; // Y-Offset: blockGrid Index → Unity Y
                     float wz = data.coord.y * data.chunkSize + z;
-                    blockPositions.Add((new Vector3(wx, y - 128, wz), blockName));
+
+                    Vector3 worldPos = new Vector3(wx, wy, wz);
+
+                    // Store block positions for ChunkInfo (same coordinates as mesh)
+                    blockPositions.Add((worldPos, blockName));
 
                     // ENHANCED: Check if this block needs special rendering (cross-shaped plants, chains, etc.)
                     if (IsCrossPlantBlock(blockName))
@@ -130,9 +132,10 @@ public class ChunkMeshBuilder
         if (adjZ < 0) adjZ += data.chunkSize;
 
         // Convert to world position and check if block exists
+        // KRITISCHER FIX: Y-Offset konsistent mit der neuen Konvention
         Vector3 worldPos = new Vector3(
             -(adjacentChunkCoord.x * data.chunkSize + adjX),
-            y,
+            y - 128, // Y-Offset: blockGrid Index → Unity Y
             adjacentChunkCoord.y * data.chunkSize + adjZ
         );
 
