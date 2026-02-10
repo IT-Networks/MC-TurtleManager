@@ -409,13 +409,12 @@ public class TurtleMainController : MonoBehaviour
 public static class TurtleMainControllerExtensions
 {
     /// <summary>
-    /// Start mining with validation and optimization
+    /// Start mining with pre-validated blocks from AreaSelectionManager (no re-validation)
     /// </summary>
     public static void StartOptimizedMining(this TurtleMainController controller, List<Vector3> blocks)
     {
-        var validBlocks = controller.ValidateMiningBlocks(blocks);
-        var optimizedBlocks = controller.OptimizeMiningOrder(validBlocks);
-        controller.StartMiningOperation(optimizedBlocks);
+        // Blocks are already validated by AreaSelectionManager - use pre-validated path
+        controller.StartPreValidatedMining(blocks);
     }
 
     /// <summary>

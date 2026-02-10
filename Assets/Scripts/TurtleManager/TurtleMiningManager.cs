@@ -9,7 +9,7 @@ public class TurtleMiningManager : MonoBehaviour
 {
     [Header("Mining Settings")]
     public bool enableMiningOptimization = true;
-    public bool validateBlocksBeforeMining = true;
+    public bool validateBlocksBeforeMining = false; // Blocks are pre-validated by AreaSelectionManager
     public float blockValidationRadius = 50f;
     public float miningPositionTolerance = 0.1f;
 
