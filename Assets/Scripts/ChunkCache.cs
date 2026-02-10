@@ -65,12 +65,12 @@ public class ChunkCache
             {
                 byte id = br.ReadByte();
                 byte lx = br.ReadByte();
-                byte y = br.ReadByte();
+                short y = br.ReadInt16(); // Read as short (was byte, causing data loss)
                 byte lz = br.ReadByte();
 
                 string blockName = (id < idToName.Count) ? idToName[id] : "default";
 
-                if (lx < chunkSize && y < 255 && lz < chunkSize)
+                if (lx < chunkSize && y >= 0 && y < 400 && lz < chunkSize)
                 {
                     blockGrid[lx, y, lz] = blockName;
                 }
@@ -127,7 +127,7 @@ public class ChunkCache
         {
             bw.Write(b.id);
             bw.Write(b.x);
-            bw.Write(b.y);
+            bw.Write(b.y); // Write as short (matches BlockRecord.y type)
             bw.Write(b.z);
         }
     }
