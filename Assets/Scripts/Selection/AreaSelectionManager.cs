@@ -344,16 +344,8 @@ public class AreaSelectionManager : MonoBehaviour
     
     private void OptimizeSelectionWithNewSystem()
     {
-        optimizedOrder.Clear();
-
-        if (currentMode == SelectionMode.Mining && turtleMainController != null && validBlocks.Count > 0)
-        {
-            optimizedOrder = turtleMainController.OptimizeMiningOrder(validBlocks);
-        }
-        else
-        {
-            optimizedOrder = new List<Vector3>(validBlocks);
-        }
+        // Column optimization is now handled internally by TurtleMiningManager.StartMiningOperation
+        optimizedOrder = new List<Vector3>(validBlocks);
     }
     
     #endregion
