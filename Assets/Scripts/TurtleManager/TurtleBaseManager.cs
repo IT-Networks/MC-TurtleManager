@@ -282,6 +282,13 @@ public class Position
 }
 
 [System.Serializable]
+public class InventoryBlockInfo
+{
+    public string name;
+    public int totalCount;
+}
+
+[System.Serializable]
 public class TurtleBaseStatus
 {
     public string label;
@@ -289,6 +296,10 @@ public class TurtleBaseStatus
     public Position position;
     public int fuelLevel;
     public bool isBusy;
+
+    // NEW: Block availability information from Lua
+    public string[] availableBlocks;        // Complete list of blocks the turtle knows about
+    public InventoryBlockInfo[] inventoryBlocks;  // Blocks currently in turtle's inventory with counts
 }
 
 #endregion

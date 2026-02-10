@@ -145,14 +145,14 @@ Light:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 157207112}
   m_Enabled: 1
-  serializedVersion: 11
+  serializedVersion: 12
   m_Type: 1
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_Intensity: 130000
   m_Range: 10
   m_SpotAngle: 30
-  m_InnerSpotAngle: 21.80208
-  m_CookieSize: 10
+  m_InnerSpotAngle: 0
+  m_CookieSize2D: {x: 0.5, y: 0.5}
   m_Shadows:
     m_Type: 2
     m_Resolution: -1
@@ -236,7 +236,10 @@ MonoBehaviour:
   m_LightUnit: 2
   m_LuxAtDistance: 1
   m_Intensity: 130000
-  m_InnerSpotPercent: 0
+  m_InnerSpotPercent: -1
+  m_ShapeWidth: -1
+  m_ShapeHeight: -1
+  m_AspectRatio: 1
   m_SpotIESCutoffPercent: 100
   m_LightDimmer: 1
   m_VolumetricDimmer: 1
@@ -245,9 +248,6 @@ MonoBehaviour:
   m_AffectDiffuse: 1
   m_AffectSpecular: 1
   m_NonLightmappedOnly: 0
-  m_ShapeWidth: 0.5
-  m_ShapeHeight: 0.5
-  m_AspectRatio: 1
   m_ShapeRadius: 0.025
   m_SoftnessScale: 1
   m_UseCustomSpotLightShadowCone: 0
@@ -354,7 +354,7 @@ MonoBehaviour:
   m_AreaLightEmissiveMeshShadowCastingMode: 0
   m_AreaLightEmissiveMeshMotionVectorGenerationMode: 0
   m_AreaLightEmissiveMeshLayer: -1
-  m_Version: 13
+  m_Version: 14
   m_ObsoleteShadowResolutionTier: 1
   m_ObsoleteUseShadowQualitySettings: 0
   m_ObsoleteCustomShadowResolution: 512
@@ -420,6 +420,8 @@ MeshRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -441,9 +443,11 @@ MeshRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!33 &338416403
 MeshFilter:
@@ -491,14 +495,12 @@ MonoBehaviour:
   refuelPos: {x: 1022, y: -397, z: -5}
   useTeleportForRefuel: 1
   status:
+    id: 0
     label: 
+    position: {x: 0, y: 0, z: 0}
     direction: 
-    position:
-      x: 0
-      y: 0
-      z: 0
-    fuelLevel: 0
-    isBusy: 0
+    fuel: 0
+    status: 
 --- !u!1 &432432459
 GameObject:
   m_ObjectHideFlags: 0
@@ -622,6 +624,15 @@ MonoBehaviour:
   chunkSize: 16
   chunkLoadRadius: 2
   chunkRefreshInterval: 0.5
+  useFrustumBasedLoading: 1
+  frustumBufferRings: 1
+  maxFrustumCheckDistance: 15
+  useMovementPrioritization: 1
+  cancelLoadingOnMovement: 1
+  movementThreshold: 0.5
+  useChunkPooling: 1
+  enableMeshCaching: 1
+  maxPooledChunks: 100
   enableBlockInteractions: 1
   maxConcurrentRegenerations: 3
   autoSyncToServer: 0
@@ -739,12 +750,31 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   buildUIOnStart: 1
   defaultFont: {fileID: 0}
-  panelColor: {r: 0.1, g: 0.1, b: 0.1, a: 0.9}
-  buttonColor: {r: 0.2, g: 0.2, b: 0.2, a: 1}
-  buttonHighlightColor: {r: 0.3, g: 0.3, b: 0.3, a: 1}
-  textColor: {r: 1, g: 1, b: 1, a: 1}
+  panelColor:
+    r: 0.1
+    g: 0.1
+    b: 0.1
+    a: 0.9
+  buttonColor:
+    r: 0.2
+    g: 0.2
+    b: 0.2
+    a: 1
+  buttonHighlightColor:
+    r: 0.3
+    g: 0.3
+    b: 0.3
+    a: 1
+  textColor:
+    r: 1
+    g: 1
+    b: 1
+    a: 1
   defaultFontSize: 14
-  constructionUI: {fileID: 1298812156}
+  constructionUI: {fileID: 0}
+  modernUIManager: {fileID: 996247710}
+  mainCanvas: {fileID: 0}
+  eventSystem: {fileID: 0}
 --- !u!4 &879930424
 Transform:
   m_ObjectHideFlags: 0
@@ -871,6 +901,14 @@ GameObject:
   m_Component:
   - component: {fileID: 996247709}
   - component: {fileID: 996247708}
+  - component: {fileID: 996247710}
+  - component: {fileID: 996247715}
+  - component: {fileID: 996247714}
+  - component: {fileID: 996247713}
+  - component: {fileID: 996247712}
+  - component: {fileID: 996247711}
+  - component: {fileID: 996247716}
+  - component: {fileID: 996247717}
   m_Layer: 0
   m_Name: UI
   m_TagString: Untagged
@@ -892,8 +930,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   createUIOnStart: 1
   targetCanvas: {fileID: 978573714}
-  textFont: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
-  fontSize: 14
+  textFont: {fileID: 12800000, guid: 257ad62994dff0e41a952da8c10ef51d, type: 3}
+  fontSize: 16
   textColor: {r: 1, g: 1, b: 1, a: 1}
   backgroundColor: {r: 0, g: 0, b: 0, a: 0.7}
 --- !u!4 &996247709
@@ -911,6 +949,215 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &996247710
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 996247707}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 870295a5a749568439a9340b26e2960b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ModernUIManager
+  mainUICanvas: {fileID: 978573711}
+  contextMenuPanel: {fileID: 0}
+  turtleListPanel: {fileID: 0}
+  taskQueuePanel: {fileID: 0}
+  quickActionsPanel: {fileID: 0}
+  structureSelectionPanel: {fileID: 0}
+  turtleManager: {fileID: 0}
+  selectionManager: {fileID: 0}
+  areaSelectionManager: {fileID: 0}
+  cameraController: {fileID: 0}
+  structureManager: {fileID: 1298812166}
+  buildModeManager: {fileID: 996247715}
+  contextMenu: {fileID: 996247714}
+  turtleList: {fileID: 996247713}
+  taskQueue: {fileID: 996247712}
+  structureSelection: {fileID: 996247711}
+  contextMenuKey: 324
+  enableHotkeys: 0
+--- !u!114 &996247711
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 996247707}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ebd96f97a3a7ff2438a1bd096b79b390, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::StructureSelectionPanel
+  structureListContent: {fileID: 0}
+  structureItemPrefab: {fileID: 0}
+  searchField: {fileID: 0}
+  categoryFilter: {fileID: 0}
+  headerText: {fileID: 0}
+  closeButton: {fileID: 0}
+  refreshButton: {fileID: 0}
+  openEditorButton: {fileID: 0}
+  previewImage: {fileID: 0}
+  previewNameText: {fileID: 0}
+  previewDescriptionText: {fileID: 0}
+  previewBlockCountText: {fileID: 0}
+  previewSizeText: {fileID: 0}
+  selectButton: {fileID: 0}
+  structureManager: {fileID: 1298812166}
+  buildModeManager: {fileID: 996247715}
+--- !u!114 &996247712
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 996247707}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dae9e820ec6bf6c458b8e5b1b38535da, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TaskQueuePanel
+  taskListContent: {fileID: 0}
+  taskItemPrefab: {fileID: 0}
+  headerText: {fileID: 0}
+  pendingCountText: {fileID: 0}
+  activeCountText: {fileID: 0}
+  completedCountText: {fileID: 0}
+  showPendingToggle: {fileID: 0}
+  showActiveToggle: {fileID: 0}
+  showCompletedToggle: {fileID: 0}
+  clearCompletedButton: {fileID: 0}
+  cancelAllButton: {fileID: 0}
+  maxCompletedTasks: 10
+  updateInterval: 0.5
+--- !u!114 &996247713
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 996247707}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 557574e9cf833584e8140b916e6e1652, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ModernTurtleListPanel
+  turtleListContent: {fileID: 0}
+  turtleItemPrefab: {fileID: 8564540265300782765, guid: 5675738dcb7d04c49adb8d9f6ecf9c46, type: 3}
+  headerText: {fileID: 0}
+  totalCountText: {fileID: 0}
+  activeCountText: {fileID: 0}
+  idleCountText: {fileID: 0}
+  showAllButton: {fileID: 0}
+  showActiveButton: {fileID: 0}
+  showIdleButton: {fileID: 0}
+  showSelectedButton: {fileID: 0}
+  selectAllButton: {fileID: 0}
+  deselectAllButton: {fileID: 0}
+  selectIdleButton: {fileID: 0}
+  updateInterval: 0.5
+  autoSort: 1
+  sortMode: 0
+--- !u!114 &996247714
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 996247707}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c08e491f1f6a9204086d4f7efd45d70f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AnnoStyleContextMenu
+  menuPanel: {fileID: 0}
+  miningButton: {fileID: 0}
+  buildingButton: {fileID: 0}
+  moveButton: {fileID: 0}
+  cancelButton: {fileID: 0}
+  buttonRadius: 80
+  buttonSize: 60
+  normalColor: {r: 0.2, g: 0.2, b: 0.2, a: 0.9}
+  highlightColor: {r: 0.3, g: 0.5, b: 0.8, a: 0.9}
+  miningColor: {r: 0.8, g: 0.3, b: 0.2, a: 0.9}
+  buildingColor: {r: 0.2, g: 0.8, b: 0.3, a: 0.9}
+  miningIcon: {fileID: 0}
+  buildingIcon: {fileID: 0}
+  moveIcon: {fileID: 0}
+  cancelIcon: {fileID: 0}
+--- !u!114 &996247715
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 996247707}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 45ccac3886468504e8ab76bf5754325b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BuildModeManager
+  areaSelectionManager: {fileID: 1298812160}
+  structureManager: {fileID: 1298812166}
+  visualizer: {fileID: 0}
+  showStructurePreview: 1
+  previewMaterial: {fileID: 0}
+  validPlacementColor: {r: 0.2, g: 1, b: 0.3, a: 0.5}
+  invalidPlacementColor: {r: 1, g: 0.2, b: 0.2, a: 0.5}
+  snapToGrid: 1
+  gridSize: 1
+  checkCollisions: 1
+  collisionCheckLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+--- !u!114 &996247716
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 996247707}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aca718ac8eaf5b641b3bf8599dcbf447, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ModernUIBuilder
+  buildUIOnStart: 1
+  defaultFont: {fileID: 12800000, guid: 257ad62994dff0e41a952da8c10ef51d, type: 3}
+  tmpFont: {fileID: 0}
+  panelColor: {r: 0.1, g: 0.1, b: 0.1, a: 0.9}
+  buttonColor: {r: 0.2, g: 0.2, b: 0.2, a: 1}
+  buttonHighlightColor: {r: 0.3, g: 0.3, b: 0.3, a: 1}
+  textColor: {r: 1, g: 1, b: 1, a: 1}
+  defaultFontSize: 16
+  modernUIManager: {fileID: 996247710}
+--- !u!114 &996247717
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 996247707}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fab9c001450edd042bc8b9c7e2bf6b62, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AreaSelectionVisualizer
+  selectionMarkerPrefab: {fileID: 6783471039951837088, guid: 65076735c07f4c74eb0d3b169bc4a5b9, type: 3}
+  boundingBoxPrefab: {fileID: 919132149155446097, guid: 233fcb69c76ef6b47a292f4ba174d57b, type: 3}
+  selectionMaterial: {fileID: 2100000, guid: 8780c788c2482c846b2fd30c71d1a0f5, type: 2}
+  miningColor: {r: 1, g: 0.3, b: 0.2, a: 0.5}
+  buildingColor: {r: 0.2, g: 1, b: 0.3, a: 0.5}
+  persistentColor: {r: 0.8, g: 0.8, b: 0.2, a: 0.6}
+  invalidColor: {r: 0.5, g: 0.5, b: 0.5, a: 0.3}
+  validColor: {r: 0.2, g: 1, b: 0.3, a: 0.6}
+  showPersistentMarkers: 1
+  showBoundingBox: 1
+  markerSize: 1.02
+  boundingBoxLineWidth: 0.1
+  areaSelectionManager: {fileID: 1298812160}
 --- !u!1 &1071262563
 GameObject:
   m_ObjectHideFlags: 0
@@ -1418,10 +1665,11 @@ GameObject:
   - component: {fileID: 1298812162}
   - component: {fileID: 1298812161}
   - component: {fileID: 1298812160}
-  - component: {fileID: 1298812159}
   - component: {fileID: 1298812157}
-  - component: {fileID: 1298812156}
   - component: {fileID: 1298812163}
+  - component: {fileID: 1298812164}
+  - component: {fileID: 1298812166}
+  - component: {fileID: 1298812165}
   m_Layer: 0
   m_Name: IntegrationManager
   m_TagString: Untagged
@@ -1429,43 +1677,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1298812156
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1298812155}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: bfcc301374ad1744db418ac13d2a5fc5, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  mainCanvas: {fileID: 0}
-  constructionPanel: {fileID: 0}
-  structureSelectionPanel: {fileID: 0}
-  operationStatusPanel: {fileID: 0}
-  miningModeButton: {fileID: 0}
-  buildingModeButton: {fileID: 0}
-  executeOperationButton: {fileID: 0}
-  cancelSelectionButton: {fileID: 0}
-  selectionStatusText: {fileID: 0}
-  selectedBlocksText: {fileID: 0}
-  structureDropdown: {fileID: 0}
-  previewStructureButton: {fileID: 0}
-  clearPreviewButton: {fileID: 0}
-  confirmBuildButton: {fileID: 0}
-  structureInfoText: {fileID: 0}
-  structurePreviewImage: {fileID: 0}
-  operationStatusText: {fileID: 0}
-  turtleStatusText: {fileID: 0}
-  operationProgressSlider: {fileID: 0}
-  emergencyStopButton: {fileID: 0}
-  cancelOperationButton: {fileID: 0}
-  operationDetailsText: {fileID: 0}
-  areaManager: {fileID: 1298812160}
-  structureManager: {fileID: 1298812159}
-  turtleMainController: {fileID: 2128933485}
 --- !u!114 &1298812157
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1488,21 +1699,6 @@ MonoBehaviour:
   gizmoDisplayTime: 3
   gizmoScale: 1.1
   worldManager: {fileID: 440537099}
---- !u!114 &1298812159
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1298812155}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9c7b6c7f3830ce34e9a80dc992f054a5, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  structuresFolder: Structures
-  previewMaterial: {fileID: 2100000, guid: 645e9a572f53c4c4cb5add343fed2b6c, type: 2}
-  previewColor: {r: 0, g: 1, b: 0, a: 0.5}
 --- !u!114 &1298812160
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1515,30 +1711,24 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 457b73c16256a6c4a8cc1e6b88f86d4c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  selectionMaterial: {fileID: 2100000, guid: 645e9a572f53c4c4cb5add343fed2b6c, type: 2}
-  miningAreaColor: {r: 1, g: 0, b: 0, a: 1}
-  buildingAreaColor: {r: 0, g: 1, b: 0, a: 1}
-  validBlockColor: {r: 0, g: 0, b: 1, a: 1}
-  invalidBlockColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
-  gizmoAlpha: 0.3
-  workAreaMaterial: {fileID: 2100000, guid: 645e9a572f53c4c4cb5add343fed2b6c, type: 2}
-  workInProgressColor: {r: 1, g: 0.5, b: 0, a: 0.5}
-  completedBlockColor: {r: 0, g: 1, b: 0, a: 0.3}
-  currentBlockColor: {r: 1, g: 1, b: 0, a: 0.8}
-  workAreaAlpha: 0.4
-  showWorkProgress: 1
-  animateCurrentBlock: 1
-  pulseSpeed: 2
-  pulseAmount: 0.2
+  cameraController: {fileID: 1174312244}
+  turtleMainController: {fileID: 2128933485}
+  turtleSelectionManager: {fileID: 1298812164}
+  pathfinder: {fileID: 1298812163}
   selectionLayerMask:
     serializedVersion: 2
     m_Bits: 4294967295
   raycastDistance: 1000
   showBlockValidation: 1
   previewOptimization: 1
-  cameraController: {fileID: 1174312244}
-  turtleMainController: {fileID: 2128933485}
-  pathfinder: {fileID: 1298812163}
+  enableKeyboardInput: 0
+  selectionMaterial: {fileID: 2100000, guid: 645e9a572f53c4c4cb5add343fed2b6c, type: 2}
+  miningAreaColor: {r: 1, g: 0, b: 0, a: 1}
+  buildingAreaColor: {r: 0, g: 1, b: 0, a: 1}
+  validBlockColor: {r: 0, g: 0, b: 1, a: 1}
+  invalidBlockColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
+  gizmoAlpha: 0.3
+  showWorkProgress: 1
 --- !u!114 &1298812161
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1559,12 +1749,11 @@ MonoBehaviour:
   turtleMiningManager: {fileID: 2128933482}
   turtleBuildingManager: {fileID: 2128933481}
   turtleOperationManager: {fileID: 2128933480}
-  blockValidator: {fileID: 2128933479}
   pathfinder: {fileID: 1298812163}
   areaSelectionManager: {fileID: 1298812160}
-  structureManager: {fileID: 1298812159}
+  structureManager: {fileID: 1298812166}
   serverUpdateManager: {fileID: 1298812157}
-  constructionUI: {fileID: 1298812156}
+  modernUIManager: {fileID: 996247710}
   autoSetupComponents: 1
   createUICanvas: 1
   setupModularTurtleSystem: 1
@@ -1621,6 +1810,53 @@ MonoBehaviour:
   optimizedPathColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
   debugLineDuration: 5
   worldManager: {fileID: 440537099}
+--- !u!114 &1298812164
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1298812155}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a6ddaf0d10a20854dac3937064262394, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TurtleSelectionManager
+  allowMultiSelect: 1
+  multiSelectKey: 306
+  turtleManager: {fileID: 1298812165}
+--- !u!114 &1298812165
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1298812155}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 065b2956a037c484bb98eb242ac1c723, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MultiTurtleManager
+  statusUrl: http://192.168.178.211:4999/status/all
+  updateInterval: 1
+  turtlePrefab: {fileID: 8564540265300782765, guid: 5675738dcb7d04c49adb8d9f6ecf9c46, type: 3}
+  autoCreateVisuals: 1
+  spawnHeight: 0.5
+--- !u!114 &1298812166
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1298812155}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 15aa213951d66604d89f94f2cdfa87da, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::StructureManager
+  structuresFolderName: Structures
+  autoLoadOnStart: 1
+  loadedStructures: []
 --- !u!1 &1823688464
 GameObject:
   m_ObjectHideFlags: 0
@@ -1990,7 +2226,7 @@ MonoBehaviour:
   validateBlocksBeforeMining: 1
   blockValidationRadius: 50
   miningPositionTolerance: 0.1
-  blockValidator: {fileID: 2128933479}
+  columnOptimizer: {fileID: 0}
 --- !u!114 &2128933483
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2016,6 +2252,8 @@ MonoBehaviour:
   validateMovementBeforeExecution: 1
   positionTolerance: 0.1
   maxMovementRetries: 3
+  enableAutoExcavation: 0
+  showExcavationWarnings: 1
 --- !u!114 &2128933484
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2053,7 +2291,7 @@ MonoBehaviour:
   miningManager: {fileID: 2128933482}
   buildingManager: {fileID: 2128933481}
   operationManager: {fileID: 2128933480}
-  blockValidator: {fileID: 2128933479}
+  worldManager: {fileID: 0}
   autoFindComponents: 1
   enableIntegratedLogging: 1
 --- !u!4 &2128933486

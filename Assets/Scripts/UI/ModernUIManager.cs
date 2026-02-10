@@ -16,6 +16,7 @@ public class ModernUIManager : MonoBehaviour
     public GameObject taskQueuePanel;
     public GameObject quickActionsPanel;
     public GameObject structureSelectionPanel;
+    public GameObject aiPromptPanel;
 
     [Header("References")]
     public MultiTurtleManager turtleManager;
@@ -30,6 +31,7 @@ public class ModernUIManager : MonoBehaviour
     public ModernTurtleListPanel turtleList;
     public TaskQueuePanel taskQueue;
     public StructureSelectionPanel structureSelection;
+    public AIPromptPanel aiPrompt;
 
     [Header("Settings")]
     public KeyCode contextMenuKey = KeyCode.Mouse1; // Right-click
@@ -43,6 +45,7 @@ public class ModernUIManager : MonoBehaviour
     // B - Toggle Building Mode / Structure Selection
     // T - Toggle Turtle List Panel
     // Q - Toggle Task Queue Panel
+    // I - Toggle AI Prompt Panel (Structure Generation)
     // ESC - Close all panels / Cancel selection
     // Right-Click - Context Menu
 
@@ -81,12 +84,18 @@ public class ModernUIManager : MonoBehaviour
         if (structureSelection == null)
             structureSelection = GetComponentInChildren<StructureSelectionPanel>();
 
+        if (aiPrompt == null)
+            aiPrompt = GetComponentInChildren<AIPromptPanel>();
+
         // Initially hide panels
         if (contextMenuPanel != null)
             contextMenuPanel.SetActive(false);
 
         if (structureSelectionPanel != null)
             structureSelectionPanel.SetActive(false);
+
+        if (aiPromptPanel != null)
+            aiPromptPanel.SetActive(false);
     }
 
     private void SetupReferences()
@@ -273,6 +282,11 @@ public class ModernUIManager : MonoBehaviour
             }
         }
 
+        if (Input.GetKeyDown(KeyCode.I))
+        {
+            ToggleAIPrompt();
+        }
+
         // ESC to close all panels
         if (Input.GetKeyDown(KeyCode.Escape))
         {
@@ -389,10 +403,37 @@ public class ModernUIManager : MonoBehaviour
             structureSelection.Hide();
     }
 
+    public void ToggleAIPrompt()
+    {
+        if (aiPromptPanel != null)
+        {
+            bool isActive = !aiPromptPanel.activeSelf;
+            aiPromptPanel.SetActive(isActive);
+
+            if (isActive && aiPrompt != null)
+            {
+                aiPrompt.ShowPanel();
+            }
+        }
+    }
+
+    public void ShowAIPrompt()
+    {
+        if (aiPrompt != null)
+            aiPrompt.ShowPanel();
+    }
+
+    public void HideAIPrompt()
+    {
+        if (aiPrompt != null)
+            aiPrompt.HidePanel();
+    }
+
     public void CloseAllPanels()
     {
         if (contextMenuPanel != null) contextMenuPanel.SetActive(false);
         if (structureSelectionPanel != null) structureSelectionPanel.SetActive(false);
+        if (aiPromptPanel != null) aiPromptPanel.SetActive(false);
     }
 
     // Task creation
