@@ -207,15 +207,13 @@ public class MultiTurtleManager : MonoBehaviour
         // Add other managers as needed
         turtleObj.AddComponent<TurtleMovementManager>();
 
-        // Add mining manager and optimizer
-        var miningManager = turtleObj.AddComponent<TurtleMiningManager>();
-        var optimizer = turtleObj.AddComponent<ColumnBasedMiningOptimizer>();
-        miningManager.columnOptimizer = optimizer; // Link them
+        // Add mining manager
+        turtleObj.AddComponent<TurtleMiningManager>();
 
         turtleObj.AddComponent<TurtleBuildingManager>();
         turtleObj.AddComponent<TurtleOperationManager>();
 
-        Debug.Log($"Turtle {turtleId}: Added managers including ColumnBasedMiningOptimizer");
+        Debug.Log($"Turtle {turtleId}: Added managers");
     }
 
     private void UpdateTurtle(int turtleId, TurtleStatus status)

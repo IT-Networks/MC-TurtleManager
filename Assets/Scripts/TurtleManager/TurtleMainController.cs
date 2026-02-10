@@ -140,16 +140,6 @@ public class TurtleMainController : MonoBehaviour
         return solidBlocks;
     }
 
-    /// <summary>
-    /// Optimize mining order
-    /// </summary>
-    public List<Vector3> OptimizeMiningOrder(List<Vector3> blockPositions)
-    {
-        if (miningManager == null) return blockPositions;
-
-        return miningManager.OptimizeMiningOrder(blockPositions);
-    }
-
     #endregion
 
     #region Public Building API
@@ -410,13 +400,12 @@ public class TurtleMainController : MonoBehaviour
 public static class TurtleMainControllerExtensions
 {
     /// <summary>
-    /// Start mining with already validated blocks (validation handled by AreaSelectionManager)
+    /// Start mining with already validated blocks (validation handled by AreaSelectionManager).
+    /// Column optimization is handled internally by TurtleMiningManager.
     /// </summary>
     public static void StartOptimizedMining(this TurtleMainController controller, List<Vector3> blocks)
     {
-        // Blocks are already validated by AreaSelectionManager - skip redundant validation
-        var optimizedBlocks = controller.OptimizeMiningOrder(blocks);
-        controller.StartMiningOperation(optimizedBlocks);
+        controller.StartMiningOperation(blocks);
     }
 
     /// <summary>
@@ -585,14 +574,13 @@ public static class TurtleMainControllerExtensions
         
         plan.originalBlocks = new List<Vector3>(blocks);
         plan.validBlocks = controller.ValidateMiningBlocks(blocks);
-        plan.optimizedBlocks = controller.OptimizeMiningOrder(plan.validBlocks);
-        
+
         plan.totalBlocks = blocks.Count;
         plan.validBlockCount = plan.validBlocks.Count;
         plan.skippedBlocks = plan.totalBlocks - plan.validBlockCount;
-        
-        plan.estimatedDistance = CalculatePathDistance(plan.optimizedBlocks, turtlePos);
-        plan.estimatedTime = EstimateMiningTime(plan.optimizedBlocks);
+
+        plan.estimatedDistance = CalculatePathDistance(plan.validBlocks, turtlePos);
+        plan.estimatedTime = EstimateMiningTime(plan.validBlocks);
         
         plan.isValid = plan.validBlockCount > 0;
         plan.errorMessage = plan.isValid ? null : "No valid blocks to mine";
@@ -649,7 +637,6 @@ public class MiningOperationPlan
     
     public List<Vector3> originalBlocks;
     public List<Vector3> validBlocks;
-    public List<Vector3> optimizedBlocks;
     
     public int totalBlocks;
     public int validBlockCount;
