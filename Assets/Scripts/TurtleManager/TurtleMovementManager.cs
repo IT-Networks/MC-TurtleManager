@@ -513,11 +513,12 @@ public class TurtleMovementManager : MonoBehaviour
         Vector3 currentPos = baseManager.GetTurtlePosition();
 
         Vector3[] adjacentPositions = {
+            blockPosition + Vector3.up,      // Above (for digdown)
             blockPosition + Vector3.right,   // East
             blockPosition + Vector3.left,    // West
             blockPosition + Vector3.forward, // North
             blockPosition + Vector3.back,    // South
-            blockPosition + Vector3.down,    // Below
+            blockPosition + Vector3.down,    // Below (for digup)
         };
 
         Vector3 bestPosition = Vector3.zero;
