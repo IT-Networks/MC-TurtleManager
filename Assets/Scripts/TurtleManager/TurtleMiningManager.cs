@@ -46,26 +46,24 @@ public class TurtleMiningManager : MonoBehaviour
         {
             Debug.LogWarning("Cannot start mining - turtle is busy");
             return;
-        }
+        }      
+        
 
-        // Filter out empty positions first
-        var solidBlocks = FilterSolidBlocks(blockPositions);
-
-        if (solidBlocks.Count == 0)
+        if (blockPositions.Count == 0)
         {
             Debug.LogWarning("No solid blocks to mine in selection");
             return;
         }
 
-        Debug.Log($"Filtered selection: {solidBlocks.Count} solid blocks from {blockPositions.Count} total positions");
+        Debug.Log($"Filtered selection: {blockPositions.Count} solid blocks from {blockPositions.Count} total positions");
 
-        var optimizedBlocks = solidBlocks;
+        var optimizedBlocks = blockPositions;
 
         // Use column-based optimizer
         if (enableMiningOptimization && columnOptimizer != null)
         {
             Vector3 turtlePos = baseManager.GetTurtlePosition();
-            var columnPlan = columnOptimizer.OptimizeMining(solidBlocks, turtlePos);
+            var columnPlan = columnOptimizer.OptimizeMining(blockPositions, turtlePos);
             optimizedBlocks = columnPlan.optimizedBlockOrder;
 
             Debug.Log($"Column-based mining plan: {columnPlan.totalColumns} columns, {columnPlan.totalBlocks} blocks");
@@ -329,7 +327,7 @@ public class TurtleMiningManager : MonoBehaviour
             }
             else
             {
-                Debug.LogWarning($"  No loaded chunks nearby. Total loaded chunks: {loadedChunks.Count()}");
+                Debug.LogWarning($"  No loaded chunks nearby. Total loaded chunks: ");
             }
 
             return false;
