@@ -78,6 +78,9 @@ public class TurtleWorldManager : MonoBehaviour
     private readonly HashSet<Vector2Int> regeneratingChunks = new HashSet<Vector2Int>();
     private readonly Queue<BlockModification> pendingServerUpdates = new Queue<BlockModification>();
 
+    // Chunk pinning - keeps chunks loaded during mining/building regardless of camera
+    private readonly HashSet<Vector2Int> _pinnedChunks = new();
+
     // Events für Block-Interaktionen
     public System.Action<Vector2Int> OnChunkLoaded;
     public System.Action<Vector3, string> OnBlockRemoved;
@@ -165,6 +168,7 @@ public class TurtleWorldManager : MonoBehaviour
         StopAllCoroutines();
         foreach (var kvp in _loadedChunks) kvp.Value.DestroyChunk();
         _loadedChunks.Clear();
+        _pinnedChunks.Clear();
         regeneratingChunks.Clear();
         pendingServerUpdates.Clear();
         // NOTE: Turtle cleanup now handled by MultiTurtleManager
@@ -244,12 +248,15 @@ public class TurtleWorldManager : MonoBehaviour
             }
         }
 
+        // Include pinned chunks (mining/building areas) so they get loaded and stay loaded
+        needed.UnionWith(_pinnedChunks);
+
         // WICHTIG: Unload ZUERST ausführen, bevor neue Chunks geladen werden!
         // So wird es immer ausgeführt, auch wenn die Coroutine später abbricht
         List<Vector2Int> toUnload = new();
         foreach (var kvp in _loadedChunks)
         {
-            if (!needed.Contains(kvp.Key))
+            if (!needed.Contains(kvp.Key) && !_pinnedChunks.Contains(kvp.Key))
                 toUnload.Add(kvp.Key);
         }
 
@@ -417,6 +424,25 @@ public class TurtleWorldManager : MonoBehaviour
     {
         _loadedChunks.TryGetValue(coord, out ChunkManager chunkManager);
         return chunkManager;
+    }
+
+    /// <summary>
+    /// Pins chunk coordinates so they stay loaded regardless of camera position.
+    /// Used during mining/building operations to prevent frustum-based unloading.
+    /// </summary>
+    public void PinChunks(IEnumerable<Vector2Int> coords)
+    {
+        foreach (var coord in coords)
+            _pinnedChunks.Add(coord);
+    }
+
+    /// <summary>
+    /// Unpins chunk coordinates, allowing normal frustum-based unloading again.
+    /// </summary>
+    public void UnpinChunks(IEnumerable<Vector2Int> coords)
+    {
+        foreach (var coord in coords)
+            _pinnedChunks.Remove(coord);
     }
 
     /// <summary>

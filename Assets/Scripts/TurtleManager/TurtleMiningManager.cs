@@ -81,6 +81,18 @@ public class TurtleMiningManager : MonoBehaviour
         var remaining = new List<Vector3>(blocks);
         var minedChunks = new HashSet<Vector2Int>();
 
+        // Pin all chunks that contain blocks to mine - prevents frustum-based
+        // unloading when camera isn't looking at the mining area
+        var pinnedChunks = new HashSet<Vector2Int>();
+        var worldMgr = baseManager.worldManager;
+        if (worldMgr != null)
+        {
+            foreach (var block in blocks)
+                pinnedChunks.Add(worldMgr.WorldPositionToChunkCoord(block));
+            worldMgr.PinChunks(pinnedChunks);
+            Debug.Log($"Pinned {pinnedChunks.Count} chunks for mining operation");
+        }
+
         for (int pass = 0; pass < maxRetryPasses && remaining.Count > 0; pass++)
         {
             if (pass > 0)
@@ -155,6 +167,9 @@ public class TurtleMiningManager : MonoBehaviour
 
         // Final mesh regeneration for all modified chunks
         RegenerateMinedChunks(minedChunks);
+
+        // Unpin chunks now that mining is done
+        worldMgr?.UnpinChunks(pinnedChunks);
 
         isMining = false;
         operationManager.CompleteOperation();
