@@ -39,8 +39,6 @@ public class TurtleWorldManager : MonoBehaviour
     [Header("Movement-Based Prioritization")]
     [Tooltip("Prioritize chunks in camera movement direction (like Minecraft)")]
     public bool useMovementPrioritization = true;
-    [Tooltip("Cancel current loading and restart when camera moves (can cause incomplete loading)")]
-    public bool cancelLoadingOnMovement = false;
     [Tooltip("Minimum camera movement to trigger reprioritization")]
     public float movementThreshold = 2f;
 
@@ -51,6 +49,8 @@ public class TurtleWorldManager : MonoBehaviour
     public bool enableMeshCaching = true;
     [Tooltip("Maximum pooled chunks (0 = unlimited)")]
     public int maxPooledChunks = 100;
+    [Tooltip("Maximum loaded chunks before trimming farthest. 0 = unlimited (chunks stay loaded until explicitly removed)")]
+    public int maxLoadedChunks = 0;
 
     [Header("Block Interaction Settings")]
     [SerializeField] private bool enableBlockInteractions = true;
@@ -226,9 +226,7 @@ public class TurtleWorldManager : MonoBehaviour
 
         if (useFrustumBasedLoading && _cam != null)
         {
-            // Use camera frustum-based loading
             needed = GetFrustumVisibleChunks();
-            // Add buffer rings
             if (frustumBufferRings > 0)
             {
                 needed.UnionWith(GetBufferRingChunks(needed, frustumBufferRings));
@@ -236,7 +234,6 @@ public class TurtleWorldManager : MonoBehaviour
         }
         else
         {
-            // Use traditional radius-based loading
             for (int x = -chunkLoadRadius; x <= chunkLoadRadius; x++)
             {
                 for (int z = -chunkLoadRadius; z <= chunkLoadRadius; z++)
@@ -246,46 +243,11 @@ public class TurtleWorldManager : MonoBehaviour
             }
         }
 
-        // Include pinned chunks (mining/building areas) so they get loaded and stay loaded
         needed.UnionWith(_pinnedChunks);
 
-        // WICHTIG: Unload ZUERST ausführen, bevor neue Chunks geladen werden!
-        // So wird es immer ausgeführt, auch wenn die Coroutine später abbricht
-        List<Vector2Int> toUnload = new();
-        foreach (var kvp in _loadedChunks)
-        {
-            if (!needed.Contains(kvp.Key) && !_pinnedChunks.Contains(kvp.Key))
-                toUnload.Add(kvp.Key);
-        }
-
-        // Chunks entladen (in Pool zurückgeben oder zerstören)
-        foreach (var c in toUnload)
-        {
-            // Entferne aus regenerating chunks wenn vorhanden
-            regeneratingChunks.Remove(c);
-
-            // Use pooling if enabled, otherwise destroy
-            if (useChunkPooling && _chunkPool != null)
-            {
-                _loadedChunks[c].ReturnToPool(_chunkPool);
-            }
-            else
-            {
-                _loadedChunks[c].DestroyChunk();
-            }
-
-            _loadedChunks.Remove(c);
-        }
-
-        if (toUnload.Count > 0)
-        {
-            Debug.Log($"Unloaded {toUnload.Count} chunks (pooled: {useChunkPooling})");
-        }
-
-        // Sort chunks by priority (movement direction)
+        // --- LOAD: Nur neue Chunks laden, bestehende bleiben erhalten ---
         List<ChunkLoadPriority> prioritizedChunks = PrioritizeChunks(needed, camChunk);
 
-        // Nur Chunks laden die noch nicht existieren
         var chunksToLoad = new List<ChunkLoadPriority>();
         foreach (var chunkPriority in prioritizedChunks)
         {
@@ -295,12 +257,11 @@ public class TurtleWorldManager : MonoBehaviour
             }
         }
 
-        // Chunks laden
         foreach (var chunkPriority in chunksToLoad)
         {
             Vector2Int coord = chunkPriority.coord;
 
-            // Wenn Kamera in der Zwischenzeit einen neuen Chunk erreicht → abbrechen
+            // Prüfe ob Kamera sich bewegt hat → ChunkStreamingLoop wird neu starten
             Vector3 camPos = _cam.transform.position;
             Vector2Int currentCamChunk = new(
                 Mathf.FloorToInt(-camPos.x / (float)chunkSize),
@@ -312,83 +273,97 @@ public class TurtleWorldManager : MonoBehaviour
                 yield break;
             }
 
-            // Check if camera moved significantly - abort if movement prioritization enabled
-            // Only abort if camera moved more than 2 chunks to avoid cancelling too frequently
-            if (useMovementPrioritization && cancelLoadingOnMovement && _movementTracker != null && _movementTracker.IsMoving)
-            {
-                float distanceMoved = Vector3.Distance(_lastCameraPosition, camPos);
-                float chunkDistance = distanceMoved / chunkSize;
-
-                // Only abort if moved more than 2 chunk distances
-                if (chunkDistance > 2f)
-                {
-                    _isLoadingChunks = false;
-                    yield break; // Will be restarted by ChunkStreamingLoop
-                }
-            }
-
-            // Create new ChunkManager (no longer MonoBehaviour)
-            // Check if chunk already exists (prevents ArgumentException)
+            // Unvollständige Chunks ersetzen
             if (_loadedChunks.ContainsKey(coord))
             {
                 var existingChunk = _loadedChunks[coord];
 
-                // Prüfe ob der existierende Chunk auch wirklich vollständig geladen ist
                 if (existingChunk != null && existingChunk.IsLoaded && existingChunk._go != null && existingChunk.VertexCount > 0)
                 {
-                    // Chunk ist OK, überspringen
-                    Debug.Log($"Chunk {coord} already exists and is properly loaded, skipping");
                     continue;
                 }
                 else
                 {
-                    // Chunk ist fehlerhaft oder unvollständig, entfernen und neu laden
-                    Debug.LogWarning($"Chunk {coord} exists but is not properly loaded (IsLoaded: {existingChunk?.IsLoaded}, VertexCount: {existingChunk?.VertexCount}), replacing it");
-
-                    if (existingChunk != null)
-                    {
-                        if (useChunkPooling && _chunkPool != null)
-                        {
-                            existingChunk.ReturnToPool(_chunkPool);
-                        }
-                        else
-                        {
-                            existingChunk.DestroyChunk();
-                        }
-                    }
-
-                    _loadedChunks.Remove(coord);
-                    // Fahre fort mit dem Laden des neuen Chunks
+                    Debug.LogWarning($"Chunk {coord} exists but is not properly loaded, replacing it");
+                    UnloadChunk(coord);
                 }
             }
 
             var chunk = new ChunkManager(coord, chunkSize, this);
             _loadedChunks.Add(coord, chunk);
 
-            // Load chunk data
             yield return StartCoroutine(chunk.LoadAndSpawnChunk());
 
-            // WICHTIG: Entferne Chunk wenn Laden fehlgeschlagen ist (kein Mesh)
-            // Dies verhindert leere Chunk-GameObjects ohne Mesh
             if (!chunk.IsLoaded || chunk._go == null || chunk.VertexCount == 0)
             {
-                Debug.LogWarning($"Chunk {coord} failed to load properly (IsLoaded: {chunk.IsLoaded}, VertexCount: {chunk.VertexCount}), removing from loaded chunks");
-
-                // Cleanup und Entfernung
-                if (useChunkPooling && _chunkPool != null)
-                {
-                    chunk.ReturnToPool(_chunkPool);
-                }
-                else
-                {
-                    chunk.DestroyChunk();
-                }
-
-                _loadedChunks.Remove(coord);
+                Debug.LogWarning($"Chunk {coord} failed to load properly, removing");
+                UnloadChunk(coord);
             }
         }
 
+        // --- TRIM: Nur entladen wenn Maximum überschritten ---
+        // Chunks bleiben geladen auch wenn sie nicht mehr im Frustum sind.
+        // Erst bei Überschreitung des Limits werden die entferntesten entladen.
+        if (maxLoadedChunks > 0 && _loadedChunks.Count > maxLoadedChunks)
+        {
+            TrimFarthestChunks(camChunk, needed);
+        }
+
         _isLoadingChunks = false;
+    }
+
+    /// <summary>
+    /// Entlädt einen einzelnen Chunk aus _loadedChunks (Pool oder Destroy).
+    /// </summary>
+    private void UnloadChunk(Vector2Int coord)
+    {
+        if (!_loadedChunks.TryGetValue(coord, out var chunk))
+            return;
+
+        regeneratingChunks.Remove(coord);
+
+        if (chunk != null)
+        {
+            if (useChunkPooling && _chunkPool != null)
+                chunk.ReturnToPool(_chunkPool);
+            else
+                chunk.DestroyChunk();
+        }
+
+        _loadedChunks.Remove(coord);
+    }
+
+    /// <summary>
+    /// Entfernt die am weitesten entfernten Chunks bis maxLoadedChunks erreicht ist.
+    /// Pinned und aktuell benötigte Chunks werden nie entfernt.
+    /// </summary>
+    private void TrimFarthestChunks(Vector2Int camChunk, HashSet<Vector2Int> needed)
+    {
+        var candidates = new List<(Vector2Int coord, float distance)>();
+        foreach (var kvp in _loadedChunks)
+        {
+            if (!needed.Contains(kvp.Key) && !_pinnedChunks.Contains(kvp.Key))
+            {
+                float dist = Vector2Int.Distance(kvp.Key, camChunk);
+                candidates.Add((kvp.Key, dist));
+            }
+        }
+
+        // Entfernteste zuerst
+        candidates.Sort((a, b) => b.distance.CompareTo(a.distance));
+
+        int toRemove = _loadedChunks.Count - maxLoadedChunks;
+        int removed = 0;
+        for (int i = 0; i < toRemove && i < candidates.Count; i++)
+        {
+            UnloadChunk(candidates[i].coord);
+            removed++;
+        }
+
+        if (removed > 0)
+        {
+            Debug.Log($"Trimmed {removed} farthest chunks (total: {_loadedChunks.Count}/{maxLoadedChunks})");
+        }
     }
 
     // *** NEUE BLOCK-MANAGEMENT METHODEN ***
