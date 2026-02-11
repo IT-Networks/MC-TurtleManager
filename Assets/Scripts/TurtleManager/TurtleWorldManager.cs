@@ -49,8 +49,8 @@ public class TurtleWorldManager : MonoBehaviour
     public bool enableMeshCaching = true;
     [Tooltip("Maximum pooled chunks (0 = unlimited)")]
     public int maxPooledChunks = 100;
-    [Tooltip("Maximum loaded chunks before trimming farthest. 0 = unlimited (chunks stay loaded until explicitly removed)")]
-    public int maxLoadedChunks = 0;
+    [Tooltip("Chunk-Entfernung zur Kamera ab der entladen wird (in Chunk-Einheiten, wie Minecraft Render Distance). 0 = nie entladen.")]
+    public int chunkUnloadRadius = 20;
 
     [Header("Block Interaction Settings")]
     [SerializeField] private bool enableBlockInteractions = true;
@@ -301,12 +301,10 @@ public class TurtleWorldManager : MonoBehaviour
             }
         }
 
-        // --- TRIM: Nur entladen wenn Maximum überschritten ---
-        // Chunks bleiben geladen auch wenn sie nicht mehr im Frustum sind.
-        // Erst bei Überschreitung des Limits werden die entferntesten entladen.
-        if (maxLoadedChunks > 0 && _loadedChunks.Count > maxLoadedChunks)
+        // --- UNLOAD: Chunks entladen die zu weit von der Kamera entfernt sind ---
+        if (chunkUnloadRadius > 0)
         {
-            TrimFarthestChunks(camChunk, needed);
+            UnloadDistantChunks(camChunk);
         }
 
         _isLoadingChunks = false;
@@ -334,36 +332,27 @@ public class TurtleWorldManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Entfernt die am weitesten entfernten Chunks bis maxLoadedChunks erreicht ist.
-    /// Pinned und aktuell benötigte Chunks werden nie entfernt.
+    /// Entlädt Chunks die weiter als chunkUnloadRadius von der Kamera entfernt sind.
+    /// Pinned Chunks werden nie entladen.
     /// </summary>
-    private void TrimFarthestChunks(Vector2Int camChunk, HashSet<Vector2Int> needed)
+    private void UnloadDistantChunks(Vector2Int camChunk)
     {
-        var candidates = new List<(Vector2Int coord, float distance)>();
+        var toUnload = new List<Vector2Int>();
         foreach (var kvp in _loadedChunks)
         {
-            if (!needed.Contains(kvp.Key) && !_pinnedChunks.Contains(kvp.Key))
-            {
-                float dist = Vector2Int.Distance(kvp.Key, camChunk);
-                candidates.Add((kvp.Key, dist));
-            }
+            if (_pinnedChunks.Contains(kvp.Key))
+                continue;
+
+            float dist = Vector2Int.Distance(kvp.Key, camChunk);
+            if (dist > chunkUnloadRadius)
+                toUnload.Add(kvp.Key);
         }
 
-        // Entfernteste zuerst
-        candidates.Sort((a, b) => b.distance.CompareTo(a.distance));
+        foreach (var coord in toUnload)
+            UnloadChunk(coord);
 
-        int toRemove = _loadedChunks.Count - maxLoadedChunks;
-        int removed = 0;
-        for (int i = 0; i < toRemove && i < candidates.Count; i++)
-        {
-            UnloadChunk(candidates[i].coord);
-            removed++;
-        }
-
-        if (removed > 0)
-        {
-            Debug.Log($"Trimmed {removed} farthest chunks (total: {_loadedChunks.Count}/{maxLoadedChunks})");
-        }
+        if (toUnload.Count > 0)
+            Debug.Log($"Unloaded {toUnload.Count} distant chunks (radius: {chunkUnloadRadius})");
     }
 
     // *** NEUE BLOCK-MANAGEMENT METHODEN ***
