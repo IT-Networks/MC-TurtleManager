@@ -195,21 +195,19 @@ public class TurtleWorldManager : MonoBehaviour
                     cameraMovedSignificantly = distanceMoved > movementThreshold && _movementTracker.IsMoving;
                 }
 
-                // Interrupt current loading if camera is moving and we have that feature enabled
-                if (cancelLoadingOnMovement && cameraMovedSignificantly && _isLoadingChunks)
+                // Start new loading if chunk changed OR camera moved significantly
+                if (camChunk != _currentCameraChunk || (cameraMovedSignificantly && !_isLoadingChunks))
                 {
+                    // CRITICAL: Always stop the previous coroutine before starting a new one.
+                    // Without this, two UpdateLoadedChunks run concurrently - the new one
+                    // unloads chunks while the old one is still loading them.
                     if (_currentChunkLoadingCoroutine != null)
                     {
                         StopCoroutine(_currentChunkLoadingCoroutine);
                         _currentChunkLoadingCoroutine = null;
                         _isLoadingChunks = false;
-                        Debug.Log("Chunk loading interrupted due to camera movement - reprioritizing");
                     }
-                }
 
-                // Start new loading if chunk changed OR camera moved significantly
-                if (camChunk != _currentCameraChunk || (cameraMovedSignificantly && !_isLoadingChunks))
-                {
                     _currentCameraChunk = camChunk;
                     _lastCameraPosition = camPos;
 
