@@ -1,6 +1,7 @@
 using System.Collections.Generic;
+using System.Diagnostics;
 using UnityEngine;
-using System.Linq;
+using Debug = UnityEngine.Debug;
 
 /// <summary>
 /// Optimized area selection manager - maintains compatibility with existing code
@@ -85,8 +86,21 @@ public class AreaSelectionManager : MonoBehaviour
     
     // Visualization
     private AreaSelectionVisualizer visualizer;
-    
+
+    // Dirty-flag: skip visualization rebuild when selection box hasn't changed
+    private bool _selectionBoxDirty;
+    private bool _blockVisDirty;
+
+    // Cached Camera.main — avoids per-frame FindGameObjectWithTag("MainCamera")
+    private Camera _mainCamera;
+
     #endregion
+
+    [Conditional("UNITY_EDITOR")]
+    private static void LogDebug(string message)
+    {
+        Debug.Log(message);
+    }
 
     #region Events
     
@@ -119,6 +133,8 @@ public class AreaSelectionManager : MonoBehaviour
     
     private void Start()
     {
+        _mainCamera = Camera.main;
+
         // Auto-find dependencies if not assigned
         if (turtleMainController == null)
             turtleMainController = FindFirstObjectByType<TurtleMainController>();
@@ -205,7 +221,7 @@ public class AreaSelectionManager : MonoBehaviour
         {
             selectionStart = GetBlockPosition(worldPos.Value);
             selectionEnd = selectionStart;
-            Debug.Log($"Started {currentMode} selection at {selectionStart}");
+            LogDebug($"Started {currentMode} selection at {selectionStart}");
         }
     }
     
@@ -214,8 +230,12 @@ public class AreaSelectionManager : MonoBehaviour
         var worldPos = GetWorldPositionFromMouse();
         if (worldPos.HasValue)
         {
-            selectionEnd = GetBlockPosition(worldPos.Value);
-            visualizer?.UpdateSelectionBox(selectionStart.Value, selectionEnd.Value, currentMode);
+            Vector3 newEnd = GetBlockPosition(worldPos.Value);
+            if (!selectionEnd.HasValue || newEnd != selectionEnd.Value)
+            {
+                selectionEnd = newEnd;
+                _selectionBoxDirty = true;
+            }
         }
     }
     
@@ -226,25 +246,16 @@ public class AreaSelectionManager : MonoBehaviour
         selectedBlocks.Clear();
         selectedBlocks.AddRange(GetBlocksInSelection(selectionStart.Value, selectionEnd.Value));
 
-        Debug.Log($"=== SELECTION FINISHED ===");
-        Debug.Log($"Selection bounds: start={selectionStart.Value}, end={selectionEnd.Value}");
-        Debug.Log($"Total blocks in selection: {selectedBlocks.Count}");
-
-        if (selectedBlocks.Count > 0)
-        {
-            // Log first and last block for verification
-            Debug.Log($"First block: {selectedBlocks[0]}");
-            if (selectedBlocks.Count > 1)
-                Debug.Log($"Last block: {selectedBlocks[selectedBlocks.Count - 1]}");
-        }
+        LogDebug($"Selection finished: bounds start={selectionStart.Value}, end={selectionEnd.Value}, {selectedBlocks.Count} blocks");
 
         ValidateSelectionWithNewSystem();
         OptimizeSelectionWithNewSystem();
         UpdateSelectionStats();
 
-        Debug.Log($"Selected {selectedBlocks.Count} blocks for {currentMode}");
+        LogDebug($"Selected {selectedBlocks.Count} blocks for {currentMode}");
         OnAreaSelected?.Invoke(selectedBlocks, currentMode);
 
+        _blockVisDirty = true;
         CreateVisualization();
 
         selectionStart = null;
@@ -269,7 +280,14 @@ public class AreaSelectionManager : MonoBehaviour
         if (currentMode == SelectionMode.Mining && turtleMainController != null)
         {
             validBlocks.AddRange(turtleMainController.ValidateMiningBlocks(selectedBlocks));
-            invalidBlocks.AddRange(selectedBlocks.Except(validBlocks));
+
+            // HashSet diff instead of LINQ .Except() — avoids intermediate enumerator allocations
+            var validSet = new HashSet<Vector3>(validBlocks);
+            for (int i = 0; i < selectedBlocks.Count; i++)
+            {
+                if (!validSet.Contains(selectedBlocks[i]))
+                    invalidBlocks.Add(selectedBlocks[i]);
+            }
         }
         else if (currentMode == SelectionMode.Building && turtleMainController != null)
         {
@@ -286,7 +304,7 @@ public class AreaSelectionManager : MonoBehaviour
             validBlocks.AddRange(selectedBlocks);
         }
 
-        Debug.Log($"Block validation: {selectedBlocks.Count} total, {validBlocks.Count} valid, {invalidBlocks.Count} invalid");
+        LogDebug($"Block validation: {selectedBlocks.Count} total, {validBlocks.Count} valid, {invalidBlocks.Count} invalid");
     }
 
     /// <summary>
@@ -338,7 +356,7 @@ public class AreaSelectionManager : MonoBehaviour
 
         if (missingChunks.Count == 0 && unloadedChunks.Count == 0)
         {
-            Debug.Log($"Selection validation: All {requiredChunks.Count} required chunks are loaded");
+            LogDebug($"Selection validation: All {requiredChunks.Count} required chunks are loaded");
         }
     }
     
@@ -366,7 +384,7 @@ public class AreaSelectionManager : MonoBehaviour
                 ExecuteOptimizedMining();
                 break;
             case SelectionMode.Building:
-                Debug.Log("Please select a structure to build first");
+                LogDebug("Please select a structure to build first");
                 break;
         }
     }
@@ -382,7 +400,7 @@ public class AreaSelectionManager : MonoBehaviour
         List<Vector3> blocksToMine = previewOptimization && optimizedOrder.Count > 0 ?
                                      optimizedOrder : validBlocks;
 
-        Debug.Log($"Executing mining operation: {blocksToMine.Count} blocks");
+        LogDebug($"Executing mining operation: {blocksToMine.Count} blocks");
 
         // Create simple work area visualization
         CreateWorkAreaVisualization(blocksToMine, SelectionMode.Mining);
@@ -391,13 +409,21 @@ public class AreaSelectionManager : MonoBehaviour
         if (turtleSelectionManager != null && turtleSelectionManager.HasSelection())
         {
             turtleSelectionManager.AssignMiningTask(blocksToMine);
-            Debug.Log($"Mining task assigned to {turtleSelectionManager.GetSelectionCount()} selected turtle(s)");
+            LogDebug($"Mining task assigned to {turtleSelectionManager.GetSelectionCount()} selected turtle(s)");
+
+            // Create task in UI and wire operation events
+            var uiManager = FindFirstObjectByType<ModernUIManager>();
+            if (uiManager != null)
+            {
+                uiManager.CreateMiningTask(blocksToMine);
+                WireOperationEventsToTaskQueue(uiManager);
+            }
         }
         // Fallback to single turtle controller
         else if (turtleMainController != null)
         {
             turtleMainController.StartOptimizedMining(blocksToMine);
-            Debug.Log("Mining task assigned to default turtle");
+            LogDebug("Mining task assigned to default turtle");
         }
         else
         {
@@ -409,6 +435,22 @@ public class AreaSelectionManager : MonoBehaviour
         ResetSelection();
     }
     
+    private void WireOperationEventsToTaskQueue(ModernUIManager uiManager)
+    {
+        if (uiManager.taskQueue == null) return;
+
+        var selectedTurtles = turtleSelectionManager.GetSelectedTurtles();
+        foreach (var turtle in selectedTurtles)
+        {
+            var opManager = turtle.GetComponent<TurtleOperationManager>();
+            if (opManager != null)
+            {
+                opManager.OnOperationStarted += uiManager.taskQueue.OnOperationStarted;
+                opManager.OnOperationCompleted += uiManager.taskQueue.OnOperationCompleted;
+            }
+        }
+    }
+
     public void ExecuteBuilding(StructureData structureData)
     {
         if (validBlocks.Count == 0 || structureData == null)
@@ -424,7 +466,7 @@ public class AreaSelectionManager : MonoBehaviour
         }
 
         Vector3 buildOrigin = validBlocks[0];
-        Debug.Log($"Executing building operation: {structureData.name} at {buildOrigin}");
+        LogDebug($"Executing building operation: {structureData.name} at {buildOrigin}");
         
         List<Vector3> buildPositions = new List<Vector3>();
         foreach (var block in structureData.blocks)
@@ -454,7 +496,7 @@ public class AreaSelectionManager : MonoBehaviour
         {
             CancelSelection();
             currentMode = mode;
-            Debug.Log($"Selection mode: {currentMode}");
+            LogDebug($"Selection mode: {currentMode}");
         }
         
         visualizer?.SetMode(currentMode);
@@ -474,14 +516,14 @@ public class AreaSelectionManager : MonoBehaviour
         ClearVisualization();
         OnSelectionCleared?.Invoke();
         
-        Debug.Log("Selection cancelled");
+        LogDebug("Selection cancelled");
     }
     
     public void ToggleOptimizationPreview()
     {
         previewOptimization = !previewOptimization;
         UpdateVisualization();
-        Debug.Log($"Optimization preview: {(previewOptimization ? "ON" : "OFF")}");
+        LogDebug($"Optimization preview: {(previewOptimization ? "ON" : "OFF")}");
     }
     
     public void RevalidateSelection()
@@ -491,9 +533,10 @@ public class AreaSelectionManager : MonoBehaviour
             ValidateSelectionWithNewSystem();
             OptimizeSelectionWithNewSystem();
             UpdateSelectionStats();
+            _blockVisDirty = true;
             CreateVisualization();
-            
-            Debug.Log("Selection revalidated and optimized");
+
+            LogDebug("Selection revalidated and optimized");
         }
     }
     
@@ -532,9 +575,9 @@ public class AreaSelectionManager : MonoBehaviour
     
     public bool IsSelecting => currentMode != SelectionMode.None;
     public SelectionMode CurrentMode => currentMode;
-    public List<Vector3> SelectedBlocks => new List<Vector3>(selectedBlocks);
-    public List<Vector3> ValidBlocks => new List<Vector3>(validBlocks);
-    public List<Vector3> OptimizedOrder => new List<Vector3>(optimizedOrder);
+    public IReadOnlyList<Vector3> SelectedBlocks => selectedBlocks;
+    public IReadOnlyList<Vector3> ValidBlocks => validBlocks;
+    public IReadOnlyList<Vector3> OptimizedOrder => optimizedOrder;
     public SelectionStats CurrentStats => currentStats;
     
     #endregion
@@ -543,7 +586,8 @@ public class AreaSelectionManager : MonoBehaviour
     
     private Vector3? GetWorldPositionFromMouse()
     {
-        Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+        if (_mainCamera == null) _mainCamera = Camera.main;
+        Ray ray = _mainCamera.ScreenPointToRay(Input.mousePosition);
 
         if (Physics.Raycast(ray, out RaycastHit hit, raycastDistance, selectionLayerMask))
         {
@@ -573,54 +617,44 @@ public class AreaSelectionManager : MonoBehaviour
     
     private List<Vector3> GetBlocksInSelection(Vector3 start, Vector3 end)
     {
-        List<Vector3> blocks = new List<Vector3>();
-        
-        Vector3 min = new Vector3(
-            Mathf.Min(start.x, end.x),
-            Mathf.Min(start.y, end.y),
-            Mathf.Min(start.z, end.z)
-        );
-        
-        Vector3 max = new Vector3(
-            Mathf.Max(start.x, end.x),
-            Mathf.Max(start.y, end.y),
-            Mathf.Max(start.z, end.z)
-        );
-        
-        for (float x = min.x; x <= max.x; x++)
+        int minX = Mathf.FloorToInt(Mathf.Min(start.x, end.x));
+        int minY = Mathf.FloorToInt(Mathf.Min(start.y, end.y));
+        int minZ = Mathf.FloorToInt(Mathf.Min(start.z, end.z));
+        int maxX = Mathf.FloorToInt(Mathf.Max(start.x, end.x));
+        int maxY = Mathf.FloorToInt(Mathf.Max(start.y, end.y));
+        int maxZ = Mathf.FloorToInt(Mathf.Max(start.z, end.z));
+
+        int capacity = (maxX - minX + 1) * (maxY - minY + 1) * (maxZ - minZ + 1);
+        List<Vector3> blocks = new List<Vector3>(capacity);
+
+        for (int x = minX; x <= maxX; x++)
         {
-            for (float y = min.y; y <= max.y; y++)
+            for (int y = minY; y <= maxY; y++)
             {
-                for (float z = min.z; z <= max.z; z++)
+                for (int z = minZ; z <= maxZ; z++)
                 {
                     blocks.Add(new Vector3(x, y, z));
                 }
             }
         }
-        
+
         return blocks;
     }
     
     private void UpdateSelectionStats()
     {
+        float distance = CalculatePathDistance(optimizedOrder);
+
         currentStats = new SelectionStats
         {
             totalSelected = selectedBlocks.Count,
             validBlocks = validBlocks.Count,
             invalidBlocks = invalidBlocks.Count,
-            estimatedDistance = CalculatePathDistance(optimizedOrder),
+            estimatedDistance = distance,
+            optimizationSavings = 0f, // Optimization is now handled by TurtleMiningManager
             blocksCompleted = 0,
             progressPercentage = 0f
         };
-
-        if (validBlocks.Count > 0 && optimizedOrder.Count > 0)
-        {
-            float originalDistance = CalculatePathDistance(validBlocks);
-            float optimizedDistance = CalculatePathDistance(optimizedOrder);
-            currentStats.optimizationSavings = originalDistance > 0 
-                ? (originalDistance - optimizedDistance) / originalDistance * 100f 
-                : 0f;
-        }
 
         currentStats.summary = GenerateStatSummary();
         OnSelectionStatsUpdated?.Invoke(currentStats);
@@ -666,13 +700,17 @@ public class AreaSelectionManager : MonoBehaviour
     
     private void UpdateVisualization()
     {
-        if (selectionStart.HasValue && selectionEnd.HasValue && Input.GetMouseButton(0))
+        // Only rebuild selection box when the drag endpoint moved to a new block
+        if (_selectionBoxDirty && selectionStart.HasValue && selectionEnd.HasValue)
         {
+            _selectionBoxDirty = false;
             visualizer?.UpdateSelectionBox(selectionStart.Value, selectionEnd.Value, currentMode);
         }
-        
-        if (showBlockValidation)
+
+        // Only rebuild block validation visuals when the selection actually changed
+        if (_blockVisDirty && showBlockValidation)
         {
+            _blockVisDirty = false;
             visualizer?.UpdateVisualization(selectedBlocks, currentMode);
         }
     }
@@ -707,7 +745,7 @@ public class AreaSelectionManager : MonoBehaviour
         
         OnWorkAreaCreated?.Invoke(activeWorkArea);
         
-        Debug.Log($"Created work area visualization for {blocks.Count} blocks");
+        LogDebug($"Created work area visualization for {blocks.Count} blocks");
     }
     
     private void ClearWorkAreaVisualization()
@@ -716,7 +754,7 @@ public class AreaSelectionManager : MonoBehaviour
         {
             if (activeWorkArea.container != null)
             {
-                DestroyImmediate(activeWorkArea.container);
+                Destroy(activeWorkArea.container);
             }
             activeWorkArea = null;
         }
@@ -741,7 +779,7 @@ public class AreaSelectionManager : MonoBehaviour
     {
         if (activeWorkArea == null) return;
         
-        Debug.Log($"Operation completed: {type}, Success: {stats.SuccessfulBlocks}/{stats.TotalAttempted} ({stats.SuccessRate:P1})");
+        LogDebug($"Operation completed: {type}, Success: {stats.SuccessfulBlocks}/{stats.TotalAttempted} ({stats.SuccessRate:P1})");
         
         activeWorkArea.completedBlocks = activeWorkArea.totalBlocks;
         OnWorkCompleted?.Invoke();

@@ -39,6 +39,7 @@ public class TurtleBaseManager : MonoBehaviour
         Application.runInBackground = true;
 
         worldManager = GetComponent<TurtleWorldManager>() ?? FindFirstObjectByType<TurtleWorldManager>();
+        OnStatusUpdated += PushStatusToTurtleObject;
         StartCoroutine(UpdateTurtleBaseStatus());
         StartCoroutine(ProcessCommandQueue());
     }
@@ -241,7 +242,24 @@ public class TurtleBaseManager : MonoBehaviour
 
     protected virtual void OnDestroy()
     {
+        OnStatusUpdated -= PushStatusToTurtleObject;
         StopAllCoroutines();
+    }
+
+    private void PushStatusToTurtleObject(TurtleBaseStatus status)
+    {
+        var turtleObj = GetComponent<TurtleObject>();
+        if (turtleObj == null) return;
+
+        var visualStatus = new TurtleStatus
+        {
+            id = int.TryParse(defaultTurtleId, out int id) ? id : 0,
+            label = status.label,
+            position = new Vector3Int(status.position.x, status.position.y, status.position.z),
+            direction = status.direction,
+            fuel = status.fuelLevel
+        };
+        turtleObj.UpdateStatus(visualStatus);
     }
 }
 

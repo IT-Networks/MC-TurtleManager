@@ -1,9 +1,11 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using Unity.AI.Navigation;
 using UnityEngine;
 using UnityEngine.AI;
 using System.Linq;
+using Debug = UnityEngine.Debug;
 
 /// <summary>
 /// Enhanced pathfinding system with per-chunk NavMesh management
@@ -58,6 +60,10 @@ public class BlockWorldPathfinder : MonoBehaviour
     public bool enableVerticalMovement = true;
     public float verticalSearchDistance = 10f;
 
+    [Header("Grid A* Fallback")]
+    [Tooltip("Maximum nodes to explore in grid-based A* before giving up")]
+    public int maxGridSearchNodes = 5000;
+
     [Header("Path Optimization")]
     public bool enablePathOptimization = true;
     public bool removeRedundantMoves = true;
@@ -90,6 +96,7 @@ public class BlockWorldPathfinder : MonoBehaviour
     // Batched rebuild optimization
     private readonly HashSet<Vector2Int> chunksWithPendingChanges = new();
     private readonly Dictionary<Vector2Int, int> chunkChangeCount = new();
+    private int _totalBlockChanges = 0; // Running total — avoids O(n) iteration per block change
     private float lastRebuildTime = 0f;
     private Coroutine batchedRebuildCoroutine = null;
 
@@ -103,9 +110,22 @@ public class BlockWorldPathfinder : MonoBehaviour
     private readonly List<ChunkBuildRequest> prioritizedBuildQueue = new();
     private Vector3 lastTurtlePosition = Vector3.zero;
 
-    // Path rasterization cache
-    private readonly Dictionary<(Vector3, Vector3), List<Vector3>> rasterizationCache = new();
+    // Path rasterization cache — uses integer grid keys to avoid floating-point equality issues
+    private readonly Dictionary<(Vector3Int, Vector3Int), List<Vector3>> rasterizationCache = new();
     private const int MAX_CACHE_SIZE = 1000;
+
+    // Block type classification — static HashSets avoid per-call ToLowerInvariant + Contains
+    private static readonly HashSet<string> NonSolidBlockTypes = new(System.StringComparer.OrdinalIgnoreCase)
+    {
+        "water", "flowing_water", "lava", "flowing_lava", "air", "cave_air", "void_air",
+        "minecraft:water", "minecraft:flowing_water", "minecraft:lava", "minecraft:flowing_lava",
+        "minecraft:air", "minecraft:cave_air", "minecraft:void_air"
+    };
+    private static readonly HashSet<string> AirBlockTypes = new(System.StringComparer.OrdinalIgnoreCase)
+    {
+        "air", "cave_air", "void_air",
+        "minecraft:air", "minecraft:cave_air", "minecraft:void_air"
+    };
 
     /// <summary>
     /// Data structure for per-chunk NavMesh
@@ -118,6 +138,16 @@ public class BlockWorldPathfinder : MonoBehaviour
         public bool isBuilt;
         public Coroutine buildCoroutine;
         public List<NavMeshBuildSource> sources = new();
+    }
+
+    /// <summary>
+    /// Conditional debug log — entire call site (including string formatting) is stripped
+    /// from non-editor builds by the compiler. Zero overhead in release.
+    /// </summary>
+    [Conditional("UNITY_EDITOR")]
+    private static void LogDebug(string message)
+    {
+        Debug.Log(message);
     }
 
     void Start()
@@ -205,7 +235,7 @@ public class BlockWorldPathfinder : MonoBehaviour
     {
         if (chunk == null || chunkNavMeshes.ContainsKey(chunk.coord)) return;
 
-        Debug.Log($"Registering NavMesh for chunk {chunk.coord}");
+        LogDebug($"Registering NavMesh for chunk {chunk.coord}");
 
         // Create NavMesh data for this chunk
         var navMeshData = new ChunkNavMeshData
@@ -235,7 +265,7 @@ public class BlockWorldPathfinder : MonoBehaviour
     {
         if (!chunkNavMeshes.TryGetValue(coord, out var navMeshData)) return;
 
-        Debug.Log($"Unregistering NavMesh for chunk {coord}");
+        LogDebug($"Unregistering NavMesh for chunk {coord}");
 
         // Stop any ongoing build
         if (navMeshData.buildCoroutine != null)
@@ -292,8 +322,15 @@ public class BlockWorldPathfinder : MonoBehaviour
     {
         if (enablePriorityBuilding)
         {
-            // Remove existing request if present
-            prioritizedBuildQueue.RemoveAll(r => r.chunkCoord == chunkCoord);
+            // Remove existing request if present (linear scan but avoids full re-sort)
+            for (int i = prioritizedBuildQueue.Count - 1; i >= 0; i--)
+            {
+                if (prioritizedBuildQueue[i].chunkCoord == chunkCoord)
+                {
+                    prioritizedBuildQueue.RemoveAt(i);
+                    break; // Only one entry per coord
+                }
+            }
 
             // Calculate priority based on distance to last known turtle position
             Vector3 chunkWorldPos = new Vector3(
@@ -305,15 +342,28 @@ public class BlockWorldPathfinder : MonoBehaviour
             float distance = Vector3.Distance(lastTurtlePosition, chunkWorldPos);
             float priority = highPriority ? 0f : distance; // Lower priority = builds first
 
-            prioritizedBuildQueue.Add(new ChunkBuildRequest
+            var request = new ChunkBuildRequest
             {
                 chunkCoord = chunkCoord,
                 priority = priority,
                 requestTime = Time.time
-            });
+            };
 
-            // Sort by priority (lower = higher priority)
-            prioritizedBuildQueue.Sort((a, b) => a.priority.CompareTo(b.priority));
+            // Binary search insertion to maintain sorted order — O(log n) instead of O(n log n)
+            int insertIndex = prioritizedBuildQueue.Count;
+            int lo = 0, hi = prioritizedBuildQueue.Count - 1;
+            while (lo <= hi)
+            {
+                int mid = (lo + hi) / 2;
+                if (prioritizedBuildQueue[mid].priority <= priority)
+                    lo = mid + 1;
+                else
+                {
+                    insertIndex = mid;
+                    hi = mid - 1;
+                }
+            }
+            prioritizedBuildQueue.Insert(insertIndex, request);
         }
         else
         {
@@ -372,7 +422,7 @@ public class BlockWorldPathfinder : MonoBehaviour
         var chunk = worldManager.GetChunkAt(coord);
         if (chunk == null || !chunk.IsLoaded) yield break;
 
-        Debug.Log($"Building NavMesh for chunk {coord}");
+        LogDebug($"Building NavMesh for chunk {coord}");
 
         // Wait for build delay
         yield return new WaitForSeconds(navMeshBuildDelay);
@@ -386,7 +436,7 @@ public class BlockWorldPathfinder : MonoBehaviour
 
         buildingChunks.Remove(coord);
 
-        Debug.Log($"NavMesh built for chunk {coord} with {navMeshData.sources.Count} sources");
+        LogDebug($"NavMesh built for chunk {coord} with {navMeshData.sources.Count} sources");
 
         // Update links after build
         UpdateChunkLinks(coord);
@@ -446,27 +496,21 @@ public class BlockWorldPathfinder : MonoBehaviour
     }
 
     /// <summary>
-    /// Check if block is solid (not air, water, or lava)
+    /// Check if block is solid (not air, water, or lava). O(1) HashSet lookup.
     /// </summary>
     private bool IsBlockSolid(string blockType)
     {
         if (string.IsNullOrEmpty(blockType)) return false;
-
-        string lower = blockType.ToLowerInvariant();
-        return !lower.Contains("water") &&
-               !lower.Contains("lava") &&
-               !lower.Contains("air");
+        return !NonSolidBlockTypes.Contains(blockType);
     }
 
     /// <summary>
-    /// Check if block is air or empty
+    /// Check if block is air or empty. O(1) HashSet lookup.
     /// </summary>
     private bool IsAirBlock(string blockType)
     {
         if (string.IsNullOrEmpty(blockType)) return true;
-
-        string lower = blockType.ToLowerInvariant();
-        return lower.Contains("air") || lower == "";
+        return AirBlockTypes.Contains(blockType);
     }
 
     #endregion
@@ -560,25 +604,16 @@ public class BlockWorldPathfinder : MonoBehaviour
     #region Event Handlers
 
     private void OnBlockRemoved(Vector3 worldPosition, string blockType)
-    {
-        if (!autoRebuildOnBlockChange) return;
-
-        Vector2Int chunkCoord = worldManager.WorldPositionToChunkCoord(worldPosition);
-        if (chunkNavMeshes.TryGetValue(chunkCoord, out var navMeshData))
-        {
-            if (enableBatchedRebuilds)
-            {
-                RegisterBlockChange(chunkCoord);
-            }
-            else
-            {
-                StartCoroutine(UpdateChunkNavMeshAfterBlockChange(chunkCoord, worldPosition));
-            }
-        }
-    }
+        => OnBlockChanged(worldPosition);
 
     private void OnBlockPlaced(Vector3 worldPosition, string blockType)
+        => OnBlockChanged(worldPosition);
+
+    private void OnBlockChanged(Vector3 worldPosition)
     {
+        // Invalidate path cache — world geometry changed
+        rasterizationCache.Clear();
+
         if (!autoRebuildOnBlockChange) return;
 
         Vector2Int chunkCoord = worldManager.WorldPositionToChunkCoord(worldPosition);
@@ -623,7 +658,7 @@ public class BlockWorldPathfinder : MonoBehaviour
         var asyncOp = navMeshData.surface.UpdateNavMesh(navMeshData.surface.navMeshData);
         yield return asyncOp;
 
-        Debug.Log($"Updated NavMesh for chunk {chunkCoord} after block change at {changePosition}");
+        LogDebug($"Updated NavMesh for chunk {chunkCoord} after block change at {changePosition}");
     }
 
     /// <summary>
@@ -640,6 +675,7 @@ public class BlockWorldPathfinder : MonoBehaviour
             chunkChangeCount[chunkCoord] = 0;
         }
         chunkChangeCount[chunkCoord]++;
+        _totalBlockChanges++; // O(1) running total
 
         // Start batched rebuild coroutine if not already running
         if (batchedRebuildCoroutine == null)
@@ -647,17 +683,10 @@ public class BlockWorldPathfinder : MonoBehaviour
             batchedRebuildCoroutine = StartCoroutine(BatchedRebuildLoop());
         }
 
-        // Check if we should force an immediate rebuild
-        int totalChanges = 0;
-        foreach (var count in chunkChangeCount.Values)
-        {
-            totalChanges += count;
-        }
-
         float timeSinceLastRebuild = Time.time - lastRebuildTime;
 
         // Force rebuild if we've accumulated too many changes or too much time has passed
-        if (totalChanges >= maxBlockChangesBeforeRebuild ||
+        if (_totalBlockChanges >= maxBlockChangesBeforeRebuild ||
             timeSinceLastRebuild >= maxTimeBetweenRebuilds)
         {
             StartCoroutine(ExecuteBatchedRebuilds());
@@ -677,15 +706,8 @@ public class BlockWorldPathfinder : MonoBehaviour
             {
                 float timeSinceLastRebuild = Time.time - lastRebuildTime;
 
-                // Rebuild if enough time has passed or if we have many changes
-                int totalChanges = 0;
-                foreach (var count in chunkChangeCount.Values)
-                {
-                    totalChanges += count;
-                }
-
                 if (timeSinceLastRebuild >= maxTimeBetweenRebuilds ||
-                    totalChanges >= maxBlockChangesBeforeRebuild)
+                    _totalBlockChanges >= maxBlockChangesBeforeRebuild)
                 {
                     yield return StartCoroutine(ExecuteBatchedRebuilds());
                 }
@@ -708,9 +730,10 @@ public class BlockWorldPathfinder : MonoBehaviour
         // Clear pending changes
         chunksWithPendingChanges.Clear();
         chunkChangeCount.Clear();
+        _totalBlockChanges = 0;
         lastRebuildTime = Time.time;
 
-        Debug.Log($"[NavMesh Optimization] Batched rebuild of {chunksToRebuild.Count} chunks");
+        LogDebug($"[NavMesh Optimization] Batched rebuild of {chunksToRebuild.Count} chunks");
 
         // Rebuild each affected chunk
         foreach (var chunkCoord in chunksToRebuild)
@@ -734,7 +757,7 @@ public class BlockWorldPathfinder : MonoBehaviour
             yield return asyncOp;
         }
 
-        Debug.Log($"[NavMesh Optimization] Completed batched rebuild of {chunksToRebuild.Count} chunks");
+        LogDebug($"[NavMesh Optimization] Completed batched rebuild of {chunksToRebuild.Count} chunks");
     }
 
     #endregion
@@ -763,371 +786,149 @@ public class BlockWorldPathfinder : MonoBehaviour
 
         return rasterized;
     }
-    // Ersetze die RasterizeSegment Methode in BlockWorldPathfinder mit dieser verbesserten Version
-
-private List<Vector3> RasterizeSegment(Vector3 from, Vector3 to, PathfindingOptions options)
-{
-    // Check cache first
-    var cacheKey = (from, to);
-    if (rasterizationCache.TryGetValue(cacheKey, out var cachedResult))
+    /// <summary>
+    /// 3D Bresenham cardinal rasterization: produces the straightest possible grid-aligned
+    /// path using only unit steps along one axis at a time. Error accumulators distribute
+    /// steps proportionally across axes — O(dx+dy+dz) with zero floating-point drift.
+    /// </summary>
+    private List<Vector3> RasterizeSegment(Vector3 from, Vector3 to, PathfindingOptions options)
     {
-        return new List<Vector3>(cachedResult); // Return a copy to avoid modification
-    }
-
-    var steps = new List<Vector3>();
-    steps.Add(from);
-
-    Vector3 current = from;
-    Vector3 target = to;
-
-    // Berechne die Gesamtdifferenz
-    Vector3 totalDiff = target - current;
-
-    // Prüfe ob es eine diagonale Bewegung ist (Bewegung in X und Z gleichzeitig)
-    bool isDiagonalMovement = Mathf.Abs(totalDiff.x) > 0.5f && Mathf.Abs(totalDiff.z) > 0.5f;
-
-    if (isDiagonalMovement)
-    {
-        // Spezielle Behandlung für diagonale Bewegungen
-        var diagonalResult = RasterizeDiagonalSegment(from, to, options);
-
-        // Cache the result
-        CacheRasterizationResult(cacheKey, diagonalResult);
-
-        return diagonalResult;
-    }
-
-    // Standard-Rasterisierung für nicht-diagonale Bewegungen
-    while (Vector3.Distance(current, target) > 0.1f)
-    {
-        Vector3 diff = target - current;
-        Vector3 step = Vector3.zero;
-
-        // Priorisiere die größte Differenz-Komponente
-        if (Mathf.Abs(diff.x) >= Mathf.Abs(diff.y) && Mathf.Abs(diff.x) >= Mathf.Abs(diff.z))
+        // Check cache using integer grid keys (avoids floating-point equality issues)
+        var fromInt = Vector3Int.FloorToInt(from);
+        var toInt = Vector3Int.FloorToInt(to);
+        var cacheKey = (fromInt, toInt);
+        if (rasterizationCache.TryGetValue(cacheKey, out var cachedResult))
         {
-            step.x = Mathf.Sign(diff.x);
-        }
-        else if (Mathf.Abs(diff.y) >= Mathf.Abs(diff.z))
-        {
-            step.y = Mathf.Sign(diff.y);
-        }
-        else
-        {
-            step.z = Mathf.Sign(diff.z);
+            return new List<Vector3>(cachedResult);
         }
 
-        Vector3 nextPos = current + step;
-        
-        if (IsValidStep(current, nextPos, options))
+        var steps = new List<Vector3>();
+        steps.Add(from);
+
+        int dx = Mathf.Abs(toInt.x - fromInt.x);
+        int dy = Mathf.Abs(toInt.y - fromInt.y);
+        int dz = Mathf.Abs(toInt.z - fromInt.z);
+        int sx = toInt.x >= fromInt.x ? 1 : -1;
+        int sy = toInt.y >= fromInt.y ? 1 : -1;
+        int sz = toInt.z >= fromInt.z ? 1 : -1;
+
+        int totalSteps = dx + dy + dz;
+        if (totalSteps == 0)
         {
-            current = nextPos;
-            steps.Add(current);
+            CacheRasterizationResult(cacheKey, steps);
+            return steps;
         }
-        else
+
+        // Bresenham error accumulators — each axis accumulates its share per iteration
+        // and fires a step when its error exceeds the threshold (totalSteps)
+        int ex = 0, ey = 0, ez = 0;
+        Vector3 current = from;
+
+        // Pre-compute step vectors to avoid per-iteration allocation
+        Vector3 stepX = new Vector3(sx, 0, 0);
+        Vector3 stepY = new Vector3(0, sy, 0);
+        Vector3 stepZ = new Vector3(0, 0, sz);
+
+        for (int i = 0; i < totalSteps; i++)
         {
-            // Wenn der direkte Schritt blockiert ist, versuche alternative
-            Vector3 altStep = FindAlternativeStep(current, target, step, options);
-            if (altStep != Vector3.zero)
+            if (steps.Count > options.maxPathLength) break;
+
+            // Accumulate error for each axis
+            ex += dx;
+            ey += dy;
+            ez += dz;
+
+            // Select axis with largest accumulated error (most "overdue" for a step)
+            Vector3 chosenStep;
+            if (ex >= ey && ex >= ez)
             {
-                nextPos = current + altStep;
-                current = nextPos;
-                steps.Add(current);
+                chosenStep = stepX;
+                ex -= totalSteps;
+            }
+            else if (ey >= ez)
+            {
+                chosenStep = stepY;
+                ey -= totalSteps;
             }
             else
             {
-                break; // Kein gültiger Pfad gefunden
+                chosenStep = stepZ;
+                ez -= totalSteps;
             }
-        }
 
-        if (steps.Count > 1000)
-        {
-            Debug.LogWarning("Path rasterization exceeded step limit");
-            break;
-        }
-    }
+            Vector3 nextPos = current + chosenStep;
 
-    // Cache the result
-    CacheRasterizationResult(cacheKey, steps);
-
-    return steps;
-}
-
-/// <summary>
-/// Cache a rasterization result with size management
-/// </summary>
-private void CacheRasterizationResult((Vector3, Vector3) key, List<Vector3> result)
-{
-    // Limit cache size to prevent memory issues
-    if (rasterizationCache.Count >= MAX_CACHE_SIZE)
-    {
-        // Remove oldest entries (simple FIFO approach)
-        var keysToRemove = rasterizationCache.Keys.Take(MAX_CACHE_SIZE / 4).ToList();
-        foreach (var oldKey in keysToRemove)
-        {
-            rasterizationCache.Remove(oldKey);
-        }
-    }
-
-    // Store a copy to avoid external modifications
-    rasterizationCache[key] = new List<Vector3>(result);
-}
-
-/// <summary>
-/// Spezialisierte Rasterisierung für diagonale Bewegungen - intelligente Pfadwahl
-/// </summary>
-private List<Vector3> RasterizeDiagonalSegment(Vector3 from, Vector3 to, PathfindingOptions options)
-{
-    var steps = new List<Vector3>();
-    steps.Add(from);
-    
-    Vector3 current = from;
-    Vector3 diff = to - from;
-    
-    // Bestimme Bewegungsrichtungen
-    int xSteps = Mathf.RoundToInt(Mathf.Abs(diff.x));
-    int ySteps = Mathf.RoundToInt(Mathf.Abs(diff.y));
-    int zSteps = Mathf.RoundToInt(Mathf.Abs(diff.z));
-    
-    int xDir = diff.x > 0 ? 1 : -1;
-    int yDir = diff.y > 0 ? 1 : -1;
-    int zDir = diff.z > 0 ? 1 : -1;
-    
-    // Strategie 1: Aufwärtsbewegung -> erst hoch, dann horizontal
-    if (yDir > 0)
-    {
-        // Erst nach oben
-        for (int i = 0; i < ySteps; i++)
-        {
-            Vector3 nextPos = current + Vector3.up;
             if (IsValidStep(current, nextPos, options))
             {
                 current = nextPos;
                 steps.Add(current);
             }
-            else break;
-        }
-        
-        // Dann horizontal (abwechselnd X und Z für natürlichere Bewegung)
-        int maxHorizontalSteps = Mathf.Max(xSteps, zSteps);
-        for (int i = 0; i < maxHorizontalSteps; i++)
-        {
-            if (i < xSteps)
-            {
-                Vector3 nextPos = current + new Vector3(xDir, 0, 0);
-                if (IsValidStep(current, nextPos, options))
-                {
-                    current = nextPos;
-                    steps.Add(current);
-                }
-            }
-            
-            if (i < zSteps)
-            {
-                Vector3 nextPos = current + new Vector3(0, 0, zDir);
-                if (IsValidStep(current, nextPos, options))
-                {
-                    current = nextPos;
-                    steps.Add(current);
-                }
-            }
-        }
-    }
-    // Strategie 2: Abwärtsbewegung oder gleiche Höhe
-    else
-    {
-        bool needsToGoDown = yDir < 0;
-        
-        // Versuche direkte Abwärtsbewegung
-        if (needsToGoDown)
-        {
-            Vector3 directDownPos = current + Vector3.down;
-            bool canGoDirectlyDown = IsValidStep(current, directDownPos, options);
-            
-            if (!canGoDirectlyDown)
-            {
-                // Wenn direktes Nach-unten blockiert ist:
-                // Erst horizontal näher zum Ziel bewegen
-                
-                // Bewege dich horizontal zum Ziel
-                for (int i = 0; i < xSteps; i++)
-                {
-                    Vector3 nextPos = current + new Vector3(xDir, 0, 0);
-                    if (IsValidStep(current, nextPos, options))
-                    {
-                        current = nextPos;
-                        steps.Add(current);
-                    }
-                }
-                
-                for (int i = 0; i < zSteps; i++)
-                {
-                    Vector3 nextPos = current + new Vector3(0, 0, zDir);
-                    if (IsValidStep(current, nextPos, options))
-                    {
-                        current = nextPos;
-                        steps.Add(current);
-                    }
-                }
-                
-                // Jetzt versuche nach unten zu gehen
-                for (int i = 0; i < ySteps; i++)
-                {
-                    Vector3 nextPos = current + Vector3.down;
-                    if (IsValidStep(current, nextPos, options))
-                    {
-                        current = nextPos;
-                        steps.Add(current);
-                    }
-                    else
-                    {
-                        // Wenn immer noch blockiert, bewege dich weiter horizontal
-                        break;
-                    }
-                }
-            }
             else
             {
-                // Direktes Nach-unten ist möglich
-                // Nutze Standard-Strategie: abwechselnd vertikal und horizontal
-                
-                int totalSteps = ySteps + xSteps + zSteps;
-                int yDone = 0, xDone = 0, zDone = 0;
-                
-                for (int i = 0; i < totalSteps; i++)
+                // Blocked — try the other two axes as alternatives
+                Vector3 alt = TryAlternativeStep(current, to, chosenStep, stepX, stepY, stepZ, options);
+                if (alt != Vector3.zero)
                 {
-                    // Priorisiere Bewegungen die näher zum Ziel führen
-                    float bestProgress = -1;
-                    Vector3 bestMove = Vector3.zero;
-                    
-                    // Teste Y-Bewegung
-                    if (yDone < ySteps)
-                    {
-                        Vector3 testPos = current + Vector3.down;
-                        if (IsValidStep(current, testPos, options))
-                        {
-                            float progress = 1.0f / Vector3.Distance(testPos, to);
-                            if (progress > bestProgress)
-                            {
-                                bestProgress = progress;
-                                bestMove = Vector3.down;
-                            }
-                        }
-                    }
-                    
-                    // Teste X-Bewegung
-                    if (xDone < xSteps)
-                    {
-                        Vector3 testPos = current + new Vector3(xDir, 0, 0);
-                        if (IsValidStep(current, testPos, options))
-                        {
-                            float progress = 1.0f / Vector3.Distance(testPos, to);
-                            if (progress > bestProgress)
-                            {
-                                bestProgress = progress;
-                                bestMove = new Vector3(xDir, 0, 0);
-                            }
-                        }
-                    }
-                    
-                    // Teste Z-Bewegung
-                    if (zDone < zSteps)
-                    {
-                        Vector3 testPos = current + new Vector3(0, 0, zDir);
-                        if (IsValidStep(current, testPos, options))
-                        {
-                            float progress = 1.0f / Vector3.Distance(testPos, to);
-                            if (progress > bestProgress)
-                            {
-                                bestProgress = progress;
-                                bestMove = new Vector3(0, 0, zDir);
-                            }
-                        }
-                    }
-                    
-                    if (bestMove != Vector3.zero)
-                    {
-                        current = current + bestMove;
-                        steps.Add(current);
-                        
-                        if (bestMove.y != 0) yDone++;
-                        if (bestMove.x != 0) xDone++;
-                        if (bestMove.z != 0) zDone++;
-                    }
-                    else
-                    {
-                        break; // Keine gültige Bewegung gefunden
-                    }
-                }
-            }
-        }
-        else
-        {
-            // Gleiche Höhe - einfache horizontale Bewegung
-            for (int i = 0; i < xSteps; i++)
-            {
-                Vector3 nextPos = current + new Vector3(xDir, 0, 0);
-                if (IsValidStep(current, nextPos, options))
-                {
-                    current = nextPos;
+                    current = current + alt;
                     steps.Add(current);
                 }
-            }
-            
-            for (int i = 0; i < zSteps; i++)
-            {
-                Vector3 nextPos = current + new Vector3(0, 0, zDir);
-                if (IsValidStep(current, nextPos, options))
+                else
                 {
-                    current = nextPos;
-                    steps.Add(current);
+                    break; // No valid move found
                 }
             }
         }
-    }
-    
-    return steps;
-}
 
+        CacheRasterizationResult(cacheKey, steps);
+        return steps;
+    }
 
-/// <summary>
-/// Findet einen alternativen Schritt wenn der direkte Weg blockiert ist
-/// </summary>
-private Vector3 FindAlternativeStep(Vector3 current, Vector3 target, Vector3 blockedStep, PathfindingOptions options)
-{
-    Vector3 diff = target - current;
-    
-    // Versuche über obere Ecke
-    if (blockedStep.y == 0) // Wenn horizontale Bewegung blockiert war
+    /// <summary>
+    /// When the preferred Bresenham step is blocked, try the remaining axes
+    /// ordered by which brings us closest to the target.
+    /// </summary>
+    private Vector3 TryAlternativeStep(Vector3 current, Vector3 target,
+        Vector3 blockedStep, Vector3 stepX, Vector3 stepY, Vector3 stepZ, PathfindingOptions options)
     {
-        Vector3 upStep = Vector3.up;
-        if (IsValidStep(current, current + upStep, options))
+        // Collect the two axes we didn't try
+        Vector3 alt1, alt2;
+        if (blockedStep.x != 0)      { alt1 = stepY; alt2 = stepZ; }
+        else if (blockedStep.y != 0)  { alt1 = stepX; alt2 = stepZ; }
+        else                          { alt1 = stepX; alt2 = stepY; }
+
+        // Try the alternative that moves us closer to the target first
+        float dist1 = (target - (current + alt1)).sqrMagnitude;
+        float dist2 = (target - (current + alt2)).sqrMagnitude;
+
+        Vector3 first = dist1 <= dist2 ? alt1 : alt2;
+        Vector3 second = dist1 <= dist2 ? alt2 : alt1;
+
+        if (IsValidStep(current, current + first, options))  return first;
+        if (IsValidStep(current, current + second, options)) return second;
+
+        // Last resort: try stepping up (useful when horizontal movement is blocked by terrain)
+        if (blockedStep.y == 0)
         {
-            return upStep;
+            Vector3 upStep = new Vector3(0, 1, 0);
+            if (IsValidStep(current, current + upStep, options)) return upStep;
         }
+
+        return Vector3.zero;
     }
-    
-    // Versuche andere Achsen
-    if (blockedStep.x != 0 && diff.z != 0)
+
+    /// <summary>
+    /// Cache a rasterization result with size management.
+    /// Uses integer grid keys to avoid floating-point equality misses.
+    /// </summary>
+    private void CacheRasterizationResult((Vector3Int, Vector3Int) key, List<Vector3> result)
     {
-        Vector3 zStep = new Vector3(0, 0, Mathf.Sign(diff.z));
-        if (IsValidStep(current, current + zStep, options))
+        if (rasterizationCache.Count >= MAX_CACHE_SIZE)
         {
-            return zStep;
+            rasterizationCache.Clear();
         }
+
+        rasterizationCache[key] = new List<Vector3>(result);
     }
-    
-    if (blockedStep.z != 0 && diff.x != 0)
-    {
-        Vector3 xStep = new Vector3(Mathf.Sign(diff.x), 0, 0);
-        if (IsValidStep(current, current + xStep, options))
-        {
-            return xStep;
-        }
-    }
-    
-    return Vector3.zero; // Keine Alternative gefunden
-}
     private bool IsValidStep(Vector3 from, Vector3 to, PathfindingOptions options)
     {
         Vector3 diff = to - from;
@@ -1176,15 +977,9 @@ private Vector3 FindAlternativeStep(Vector3 current, Vector3 target, Vector3 blo
             endPosition = end
         };
 
-        // Ensure required chunks are loaded and have NavMesh
-        if (!EnsureNavMeshForPath(start, end))
-        {
-            Debug.LogWarning("Required chunks for pathfinding are not loaded or don't have NavMesh");
-            return result;
-        }
-
-        // Try standard NavMesh pathfinding first
-        var navPath = FindNavMeshPath(start, end);
+        // Try NavMesh pathfinding first (requires NavMesh to be built for both chunks)
+        bool hasNavMesh = EnsureNavMeshForPath(start, end);
+        var navPath = hasNavMesh ? FindNavMeshPath(start, end) : new List<Vector3>();
 
         if (navPath.Count > 0)
         {
@@ -1202,7 +997,31 @@ private Vector3 FindAlternativeStep(Vector3 current, Vector3 target, Vector3 blo
 
             result.success = result.optimizedPath.Count > 0;
         }
-        else if (enableVerticalMovement)
+
+        // Grid A* fallback: uses up-to-date ChunkInfo data (always current during mining)
+        if (!result.success)
+        {
+            var gridPath = FindGridPath(start, end, options);
+            if (gridPath.Count > 0)
+            {
+                result.rawPath = gridPath;
+                // Grid path is already grid-aligned, skip rasterization
+                result.rasterizedPath = new List<Vector3>(gridPath);
+
+                if (enablePathOptimization)
+                {
+                    result.optimizedPath = OptimizePath(gridPath, options);
+                }
+                else
+                {
+                    result.optimizedPath = new List<Vector3>(gridPath);
+                }
+
+                result.success = result.optimizedPath.Count > 0;
+            }
+        }
+
+        if (!result.success && enableVerticalMovement)
         {
             var verticalPath = FindVerticalPath(start, end, options);
             if (verticalPath.Count > 0)
@@ -1281,7 +1100,7 @@ private Vector3 FindAlternativeStep(Vector3 current, Vector3 target, Vector3 blo
     public void ClearPathCache()
     {
         rasterizationCache.Clear();
-        Debug.Log("[NavMesh Optimization] Path rasterization cache cleared");
+        LogDebug("[NavMesh Optimization] Path rasterization cache cleared");
     }
 
     /// <summary>
@@ -1373,7 +1192,7 @@ private Vector3 FindAlternativeStep(Vector3 current, Vector3 target, Vector3 blo
                 break;
         }
 
-        Debug.Log($"Path optimization: {path.Count} -> {optimized.Count} steps");
+        LogDebug($"Path optimization: {path.Count} -> {optimized.Count} steps");
         return optimized;
     }
 
@@ -1409,7 +1228,7 @@ private Vector3 FindAlternativeStep(Vector3 current, Vector3 target, Vector3 blo
                     Vector3 directMove = next - prev;
                     if (directMove.magnitude <= move1.magnitude + move2.magnitude)
                     {
-                        Debug.Log($"Removed redundant vertical moves: {prev} -> {current} -> {next}");
+                        LogDebug($"Removed redundant vertical moves: {prev} -> {current} -> {next}");
                         continue; // Skip adding current point
                     }
                 }
@@ -1453,7 +1272,7 @@ private Vector3 FindAlternativeStep(Vector3 current, Vector3 target, Vector3 blo
                 if (Vector3.Dot(dir1, dir2) < -0.9f) // Nearly opposite directions
                 {
                     // Skip current point if it's just back-and-forth
-                    Debug.Log($"Removed redundant horizontal moves: {prev} -> {current} -> {next}");
+                    LogDebug($"Removed redundant horizontal moves: {prev} -> {current} -> {next}");
                     continue;
                 }
             }
@@ -1495,7 +1314,7 @@ private Vector3 FindAlternativeStep(Vector3 current, Vector3 target, Vector3 blo
 
             if (furthest > i + 1)
             {
-                Debug.Log($"Shortcut: {path[i]} directly to {path[furthest]} (skipped {furthest - i - 1} points)");
+                LogDebug($"Shortcut: {path[i]} directly to {path[furthest]} (skipped {furthest - i - 1} points)");
             }
 
             optimized.Add(path[furthest]);
@@ -1625,6 +1444,123 @@ private Vector3 FindAlternativeStep(Vector3 current, Vector3 target, Vector3 blo
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Grid-based A* pathfinding fallback. Uses ChunkInfo data (always up-to-date
+    /// during mining) instead of NavMesh (which may be stale).
+    /// 6-connected neighbors (±X, ±Y, ±Z), Manhattan distance heuristic.
+    /// </summary>
+    private List<Vector3> FindGridPath(Vector3 start, Vector3 end, PathfindingOptions options)
+    {
+        // Snap to grid centers
+        Vector3Int startGrid = new Vector3Int(
+            Mathf.RoundToInt(start.x),
+            Mathf.RoundToInt(start.y),
+            Mathf.RoundToInt(start.z));
+        Vector3Int endGrid = new Vector3Int(
+            Mathf.RoundToInt(end.x),
+            Mathf.RoundToInt(end.y),
+            Mathf.RoundToInt(end.z));
+
+        if (startGrid == endGrid)
+            return new List<Vector3> { start, end };
+
+        // Quick distance sanity check
+        float dist = Vector3.Distance(start, end);
+        if (dist > maxPathDistance) return new List<Vector3>();
+
+        // A* data structures
+        var openSet = new SortedList<float, Vector3Int>(new DuplicateKeyComparer());
+        var cameFrom = new Dictionary<Vector3Int, Vector3Int>();
+        var gScore = new Dictionary<Vector3Int, float>();
+        var inClosedSet = new HashSet<Vector3Int>();
+
+        gScore[startGrid] = 0;
+        float startH = ManhattanDistance(startGrid, endGrid);
+        openSet.Add(startH, startGrid);
+
+        Vector3Int[] neighbors =
+        {
+            Vector3Int.right, Vector3Int.left,
+            Vector3Int.up, Vector3Int.down,
+            new Vector3Int(0, 0, 1), new Vector3Int(0, 0, -1)
+        };
+
+        int nodesExplored = 0;
+
+        while (openSet.Count > 0 && nodesExplored < maxGridSearchNodes)
+        {
+            // Pop lowest f-score
+            Vector3Int current = openSet.Values[0];
+            openSet.RemoveAt(0);
+
+            if (current == endGrid)
+            {
+                // Reconstruct path
+                var path = new List<Vector3>();
+                var node = current;
+                while (cameFrom.ContainsKey(node))
+                {
+                    path.Add(new Vector3(node.x, node.y, node.z));
+                    node = cameFrom[node];
+                }
+                path.Add(start);
+                path.Reverse();
+
+                LogDebug($"[GridA*] Path found: {path.Count} steps, {nodesExplored} nodes explored");
+                return path;
+            }
+
+            if (!inClosedSet.Add(current))
+                continue;
+
+            nodesExplored++;
+            float currentG = gScore[current];
+
+            foreach (var offset in neighbors)
+            {
+                Vector3Int neighbor = current + offset;
+
+                if (inClosedSet.Contains(neighbor))
+                    continue;
+
+                Vector3 neighborWorld = new Vector3(neighbor.x, neighbor.y, neighbor.z);
+
+                if (!IsPositionWalkable(neighborWorld, options))
+                    continue;
+
+                float tentativeG = currentG + 1f;
+
+                if (!gScore.TryGetValue(neighbor, out float existingG) || tentativeG < existingG)
+                {
+                    cameFrom[neighbor] = current;
+                    gScore[neighbor] = tentativeG;
+                    float fScore = tentativeG + ManhattanDistance(neighbor, endGrid);
+                    openSet.Add(fScore, neighbor);
+                }
+            }
+        }
+
+        LogDebug($"[GridA*] No path found after {nodesExplored} nodes (limit: {maxGridSearchNodes})");
+        return new List<Vector3>();
+    }
+
+    private static float ManhattanDistance(Vector3Int a, Vector3Int b)
+    {
+        return Mathf.Abs(a.x - b.x) + Mathf.Abs(a.y - b.y) + Mathf.Abs(a.z - b.z);
+    }
+
+    /// <summary>
+    /// Comparer that allows duplicate keys in SortedList (for A* open set).
+    /// </summary>
+    private class DuplicateKeyComparer : IComparer<float>
+    {
+        public int Compare(float x, float y)
+        {
+            int result = x.CompareTo(y);
+            return result == 0 ? 1 : result; // Never return 0 to allow duplicates
+        }
     }
 
     private List<Vector3> FindVerticalPath(Vector3 start, Vector3 end, PathfindingOptions options)

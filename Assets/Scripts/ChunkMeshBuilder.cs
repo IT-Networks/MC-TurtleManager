@@ -9,20 +9,19 @@ using UnityEngine;
 public class ChunkMeshBuilder
 {
     private readonly ChunkUVProvider uvProvider;
-    private TurtleWorldManager worldManager;
+
+    // Adjacent chunk data snapshot for thread-safe cross-chunk face culling.
+    // Set per BuildMeshFromData call; safe because each ChunkManager owns its own ChunkMeshBuilder.
+    private Dictionary<Vector2Int, ChunkMeshData> _adjacentChunkData;
 
     public ChunkMeshBuilder(ChunkUVProvider uvProvider = null)
     {
         this.uvProvider = uvProvider ?? new ChunkUVProvider(1);
     }
 
-    public void SetWorldManager(TurtleWorldManager manager)
+    public PreparedChunkMesh BuildMeshFromData(ChunkMeshData data, Dictionary<Vector2Int, ChunkMeshData> adjacentChunkData = null)
     {
-        this.worldManager = manager;
-    }
-
-    public PreparedChunkMesh BuildMeshFromData(ChunkMeshData data, ChunkInfo chunkInfo = null)
-    {
+        _adjacentChunkData = adjacentChunkData;
         var submeshes = new Dictionary<string, SubmeshBuild>();
         var blockPositions = new List<(Vector3 position, string blockType)>();
 
@@ -41,9 +40,9 @@ public class ChunkMeshBuilder
                     if (!submeshes.TryGetValue(blockName, out var sb))
                         submeshes[blockName] = sb = new SubmeshBuild();
 
-                    // KRITISCHER FIX: Y-Offset konsistent mit ChunkMeshData
-                    // blockGrid Index y wird zu Unity-Weltkoordinaten konvertiert: y - 128
-                    // Dies stellt sicher, dass Mesh-Position und ChunkInfo-Position übereinstimmen
+                    // CRITICAL FIX: Y-offset consistent with ChunkMeshData
+                    // blockGrid index y is converted to Unity world coordinates: y - 128
+                    // This ensures mesh position and ChunkInfo position match
                     float wx = -(data.coord.x * data.chunkSize + x);
                     float wy = y - 128; // Y-Offset: blockGrid Index → Unity Y
                     float wz = data.coord.y * data.chunkSize + z;
@@ -91,9 +90,9 @@ public class ChunkMeshBuilder
             y == data.maxHeight - 1 || !data.HasBlock(x, y + 1, z),
             // Bottom (Y-)
             y == 0 || !data.HasBlock(x, y - 1, z),
-            // Left (X-) - KORRIGIERT: War x == 0, jetzt x == data.chunkSize - 1
+            // Left (X-) - CORRECTED: was x == 0, now x == data.chunkSize - 1
             x == data.chunkSize - 1 ? !HasBlockInAdjacentChunk(data, x, y, z, 1, 0, 0) : !data.HasBlock(x + 1, y, z),
-            // Right (X+) - KORRIGIERT: War x == data.chunkSize - 1, jetzt x == 0
+            // Right (X+) - CORRECTED: was x == data.chunkSize - 1, now x == 0
             x == 0 ? !HasBlockInAdjacentChunk(data, x, y, z, -1, 0, 0) : !data.HasBlock(x - 1, y, z)
         };
     }
@@ -101,45 +100,29 @@ public class ChunkMeshBuilder
     /// <summary>
     /// Checks if there's a block in an adjacent chunk at the given position.
     /// Returns true if a block exists (face should be hidden), false if not (face should be visible).
+    /// Thread-safe: reads from pre-snapshotted ChunkMeshData instead of Unity objects.
     /// </summary>
     private bool HasBlockInAdjacentChunk(ChunkMeshData data, int x, int y, int z, int chunkOffsetX, int chunkOffsetY, int chunkOffsetZ)
     {
-        // If no world manager, default to showing the face (conservative approach)
-        if (worldManager == null)
+        if (_adjacentChunkData == null)
             return false;
 
-        // Calculate adjacent chunk coordinates
         Vector2Int adjacentChunkCoord = new Vector2Int(
             data.coord.x + chunkOffsetX,
             data.coord.y + chunkOffsetZ
         );
 
-        // Get the adjacent chunk manager
-        ChunkManager adjacentChunk = worldManager.GetChunkAt(adjacentChunkCoord);
-        if (adjacentChunk == null || !adjacentChunk.IsLoaded)
-            return false; // Chunk not loaded, show face
-
-        ChunkInfo adjacentInfo = adjacentChunk.GetChunkInfo();
-        if (adjacentInfo == null)
+        if (!_adjacentChunkData.TryGetValue(adjacentChunkCoord, out var adjData))
             return false;
 
-        // Calculate the position in the adjacent chunk
+        // Calculate local position in the adjacent chunk
         int adjX = (x + (chunkOffsetX < 0 ? data.chunkSize - 1 : chunkOffsetX > 0 ? -data.chunkSize + 1 : 0)) % data.chunkSize;
         int adjZ = (z + (chunkOffsetZ < 0 ? data.chunkSize - 1 : chunkOffsetZ > 0 ? -data.chunkSize + 1 : 0)) % data.chunkSize;
 
-        // Handle negative modulo properly
         if (adjX < 0) adjX += data.chunkSize;
         if (adjZ < 0) adjZ += data.chunkSize;
 
-        // Convert to world position and check if block exists
-        // KRITISCHER FIX: Y-Offset konsistent mit der neuen Konvention
-        Vector3 worldPos = new Vector3(
-            -(adjacentChunkCoord.x * data.chunkSize + adjX),
-            y - 128, // Y-Offset: blockGrid Index → Unity Y
-            adjacentChunkCoord.y * data.chunkSize + adjZ
-        );
-
-        return adjacentInfo.GetBlockTypeAt(worldPos) != null;
+        return adjData.HasBlock(adjX, y, adjZ);
     }
 
     private void AddCubeFaces(SubmeshBuild sb, Vector3 center, bool[] visibleFaces, string blockName)

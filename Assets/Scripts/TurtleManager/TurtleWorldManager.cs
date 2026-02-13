@@ -81,6 +81,11 @@ public class TurtleWorldManager : MonoBehaviour
     // Chunk pinning - keeps chunks loaded during mining/building regardless of camera
     private readonly HashSet<Vector2Int> _pinnedChunks = new();
 
+    // Performance: cached stats for OnGUI to avoid per-frame recalculation
+    private BlockManagementStats _cachedStats;
+    private float _lastStatsUpdateTime = -1f;
+    private const float STATS_UPDATE_INTERVAL = 1f;
+
     // Events für Block-Interaktionen
     public System.Action<Vector2Int> OnChunkLoaded;
     public System.Action<Vector3, string> OnBlockRemoved;
@@ -973,7 +978,7 @@ public class TurtleWorldManager : MonoBehaviour
     /// </summary>
     private List<ChunkLoadPriority> PrioritizeChunks(HashSet<Vector2Int> chunks, Vector2Int cameraChunk)
     {
-        List<ChunkLoadPriority> prioritized = new List<ChunkLoadPriority>();
+        List<ChunkLoadPriority> prioritized = new List<ChunkLoadPriority>(chunks.Count);
 
         Vector3 cameraPos = _cam != null ? _cam.transform.position : Vector3.zero;
         Vector3 movementDir = Vector3.zero;
@@ -984,9 +989,16 @@ public class TurtleWorldManager : MonoBehaviour
             movementDir = _movementTracker.MovementDirection;
         }
 
+        // Calculate frustum planes ONCE for entire prioritization pass (was per-chunk before)
+        Plane[] frustumPlanes = null;
+        if (useFrustumBasedLoading && _cam != null)
+        {
+            frustumPlanes = GeometryUtility.CalculateFrustumPlanes(_cam);
+        }
+
         foreach (var chunkCoord in chunks)
         {
-            float priority = CalculateChunkPriority(chunkCoord, cameraChunk, cameraPos, movementDir);
+            float priority = CalculateChunkPriority(chunkCoord, cameraChunk, cameraPos, movementDir, frustumPlanes);
             prioritized.Add(new ChunkLoadPriority { coord = chunkCoord, priority = priority });
         }
 
@@ -1003,7 +1015,7 @@ public class TurtleWorldManager : MonoBehaviour
     /// 2. Alignment with movement direction (in front = higher)
     /// 3. Currently visible in frustum (visible = moderate boost)
     /// </summary>
-    private float CalculateChunkPriority(Vector2Int chunkCoord, Vector2Int cameraChunk, Vector3 cameraPos, Vector3 movementDir)
+    private float CalculateChunkPriority(Vector2Int chunkCoord, Vector2Int cameraChunk, Vector3 cameraPos, Vector3 movementDir, Plane[] frustumPlanes = null)
     {
         float priority = 100f; // Base priority
 
@@ -1015,11 +1027,17 @@ public class TurtleWorldManager : MonoBehaviour
         float distancePriority = 500f / (distance + 1f);
         priority += distancePriority;
 
+        // Compute chunk bounds once for both movement and frustum checks
+        Bounds chunkBounds = default;
+        bool boundsComputed = false;
+
         // Factor 2: Movement direction alignment (reduced from 75 to 30)
         if (useMovementPrioritization && movementDir != Vector3.zero)
         {
+            chunkBounds = GetChunkBounds(chunkCoord);
+            boundsComputed = true;
+
             // Get direction from camera to chunk center
-            Bounds chunkBounds = GetChunkBounds(chunkCoord);
             Vector3 toChunk = (chunkBounds.center - cameraPos).normalized;
 
             // Ignore Y component for horizontal alignment
@@ -1043,16 +1061,15 @@ public class TurtleWorldManager : MonoBehaviour
             }
         }
 
-        // Factor 3: Frustum visibility (REDUCED from +100 to +50)
-        // Visible chunks get boost, but not so much that they override distance
-        if (useFrustumBasedLoading && _cam != null)
+        // Factor 3: Frustum visibility — uses pre-computed planes from PrioritizeChunks
+        if (frustumPlanes != null)
         {
-            Bounds chunkBounds = GetChunkBounds(chunkCoord);
-            Plane[] frustumPlanes = GeometryUtility.CalculateFrustumPlanes(_cam);
+            if (!boundsComputed)
+                chunkBounds = GetChunkBounds(chunkCoord);
 
             if (GeometryUtility.TestPlanesAABB(frustumPlanes, chunkBounds))
             {
-                priority += 50f; // Moderate boost for visible chunks (was 100)
+                priority += 50f; // Moderate boost for visible chunks
             }
         }
 
@@ -1131,21 +1148,26 @@ public class TurtleWorldManager : MonoBehaviour
     {
         if (!enableBlockInteractions) return;
 
-        // Debug-Interface (nur wenn Block-Interaktionen aktiviert sind)
-        var stats = GetBlockManagementStats();
+        // Refresh stats periodically instead of every frame
+        if (Time.time - _lastStatsUpdateTime >= STATS_UPDATE_INTERVAL)
+        {
+            _cachedStats = GetBlockManagementStats();
+            _lastStatsUpdateTime = Time.time;
+        }
+
         GUILayout.BeginArea(new Rect(Screen.width - 280, 10, 270, 140));
         GUILayout.BeginVertical("Box");
-        
+
         GUILayout.Label("Chunk Management Stats:");
-        GUILayout.Label($"Loaded Chunks: {stats.LoadedChunks}");
-        GUILayout.Label($"Regenerating: {stats.RegeneratingChunks}");
-        GUILayout.Label($"Total Blocks: {stats.TotalBlocks}");
-        GUILayout.Label($"Total Vertices: {stats.TotalVertices}");
+        GUILayout.Label($"Loaded Chunks: {_cachedStats.LoadedChunks}");
+        GUILayout.Label($"Regenerating: {_cachedStats.RegeneratingChunks}");
+        GUILayout.Label($"Total Blocks: {_cachedStats.TotalBlocks}");
+        GUILayout.Label($"Total Vertices: {_cachedStats.TotalVertices}");
         if (autoSyncToServer)
         {
-            GUILayout.Label($"Pending Server Updates: {stats.PendingServerUpdates}");
+            GUILayout.Label($"Pending Server Updates: {_cachedStats.PendingServerUpdates}");
         }
-        
+
         GUILayout.EndVertical();
         GUILayout.EndArea();
     }

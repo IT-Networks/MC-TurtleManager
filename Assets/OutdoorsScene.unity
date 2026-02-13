@@ -485,22 +485,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b5df8e24640ee314fba09de29d910cc8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  selectedColor: {r: 0, g: 1, b: 0, a: 1}
-  serverUrl: http://192.168.178.211:4999/command
-  isMoving: 0
-  isRefueling: 0
-  rotationSpeed: 180
-  moveSpeed: 0.9
-  moveHeight: 0.5
-  refuelPos: {x: 1022, y: -397, z: -5}
-  useTeleportForRefuel: 1
-  status:
-    id: 0
-    label: 
-    position: {x: 0, y: 0, z: 0}
-    direction: 
-    fuel: 0
-    status: 
 --- !u!1 &432432459
 GameObject:
   m_ObjectHideFlags: 0
@@ -581,11 +565,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f481df28ded2376498d90ee71d5ce694, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  scanUrl: http://192.168.178.211:4999/report
-  cubePrefab: {fileID: 6783471039951837088, guid: 65076735c07f4c74eb0d3b169bc4a5b9, type: 3}
-  blockScale: 1
-  scanInterval: 10
-  defaultMaterial: {fileID: 2100000, guid: c303e1cf0ea144d44a33119941564ba6, type: 2}
 --- !u!4 &440537098
 Transform:
   m_ObjectHideFlags: 0
@@ -628,11 +607,11 @@ MonoBehaviour:
   frustumBufferRings: 1
   maxFrustumCheckDistance: 15
   useMovementPrioritization: 1
-  cancelLoadingOnMovement: 1
   movementThreshold: 0.5
   useChunkPooling: 1
   enableMeshCaching: 1
   maxPooledChunks: 100
+  chunkUnloadRadius: 20
   enableBlockInteractions: 1
   maxConcurrentRegenerations: 3
   autoSyncToServer: 0
@@ -648,9 +627,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f88b24974326e1349960adbdc950f1d7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxJumpHeight: 2
-  maxFallDistance: 20
-  maxSearchNodes: 5000
 --- !u!1 &565516913
 GameObject:
   m_ObjectHideFlags: 0
@@ -728,7 +704,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 879930424}
-  - component: {fileID: 879930423}
+  - component: {fileID: 879930426}
+  - component: {fileID: 879930425}
   m_Layer: 0
   m_Name: ConstructionUIBuilder
   m_TagString: Untagged
@@ -736,45 +713,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &879930423
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 879930422}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a5541f2e2607ff947b12c821ec9b482e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  buildUIOnStart: 1
-  defaultFont: {fileID: 0}
-  panelColor:
-    r: 0.1
-    g: 0.1
-    b: 0.1
-    a: 0.9
-  buttonColor:
-    r: 0.2
-    g: 0.2
-    b: 0.2
-    a: 1
-  buttonHighlightColor:
-    r: 0.3
-    g: 0.3
-    b: 0.3
-    a: 1
-  textColor:
-    r: 1
-    g: 1
-    b: 1
-    a: 1
-  defaultFontSize: 14
-  constructionUI: {fileID: 0}
-  modernUIManager: {fileID: 996247710}
-  mainCanvas: {fileID: 0}
-  eventSystem: {fileID: 0}
 --- !u!4 &879930424
 Transform:
   m_ObjectHideFlags: 0
@@ -790,6 +728,60 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &879930425
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 879930422}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aca718ac8eaf5b641b3bf8599dcbf447, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ModernUIBuilder
+  buildUIOnStart: 1
+  defaultFont: {fileID: 12800000, guid: 997a43b767814dd0a7642ec9b78cba41, type: 3}
+  tmpFont: {fileID: 11400000, guid: 8a89fa14b10d46a99122fd4f73fca9a2, type: 2}
+  panelColor: {r: 0.1, g: 0.1, b: 0.1, a: 0.9}
+  buttonColor: {r: 0.2, g: 0.2, b: 0.2, a: 1}
+  buttonHighlightColor: {r: 0.3, g: 0.3, b: 0.3, a: 1}
+  textColor: {r: 1, g: 1, b: 1, a: 1}
+  defaultFontSize: 14
+  modernUIManager: {fileID: 879930426}
+--- !u!114 &879930426
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 879930422}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 870295a5a749568439a9340b26e2960b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ModernUIManager
+  mainUICanvas: {fileID: 0}
+  contextMenuPanel: {fileID: 0}
+  turtleListPanel: {fileID: 0}
+  taskQueuePanel: {fileID: 0}
+  quickActionsPanel: {fileID: 0}
+  structureSelectionPanel: {fileID: 0}
+  aiPromptPanel: {fileID: 0}
+  turtleManager: {fileID: 0}
+  selectionManager: {fileID: 0}
+  areaSelectionManager: {fileID: 0}
+  cameraController: {fileID: 0}
+  structureManager: {fileID: 0}
+  buildModeManager: {fileID: 0}
+  contextMenu: {fileID: 0}
+  turtleList: {fileID: 0}
+  taskQueue: {fileID: 0}
+  structureSelection: {fileID: 0}
+  aiPrompt: {fileID: 0}
+  contextMenuKey: 324
+  enableHotkeys: 1
+  selectionStatusText: {fileID: 0}
 --- !u!1 &978573711
 GameObject:
   m_ObjectHideFlags: 0
@@ -967,6 +959,7 @@ MonoBehaviour:
   taskQueuePanel: {fileID: 0}
   quickActionsPanel: {fileID: 0}
   structureSelectionPanel: {fileID: 0}
+  aiPromptPanel: {fileID: 0}
   turtleManager: {fileID: 0}
   selectionManager: {fileID: 0}
   areaSelectionManager: {fileID: 0}
@@ -977,8 +970,10 @@ MonoBehaviour:
   turtleList: {fileID: 996247713}
   taskQueue: {fileID: 996247712}
   structureSelection: {fileID: 996247711}
+  aiPrompt: {fileID: 0}
   contextMenuKey: 324
   enableHotkeys: 0
+  selectionStatusText: {fileID: 0}
 --- !u!114 &996247711
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1442,7 +1437,7 @@ MonoBehaviour:
   clearDepth: 1
   volumeLayerMask:
     serializedVersion: 2
-    m_Bits: 1
+    m_Bits: 54
   volumeAnchorOverride: {fileID: 0}
   antialiasing: 0
   SMAAQuality: 2
@@ -1665,7 +1660,6 @@ GameObject:
   - component: {fileID: 1298812162}
   - component: {fileID: 1298812161}
   - component: {fileID: 1298812160}
-  - component: {fileID: 1298812157}
   - component: {fileID: 1298812163}
   - component: {fileID: 1298812164}
   - component: {fileID: 1298812166}
@@ -1677,28 +1671,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1298812157
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1298812155}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a1e600aeb0f75124b93c44a74184d7af, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  blockUpdateUrl: http://localhost:4567/updates
-  updateCheckInterval: 1
-  maxUpdatesPerFrame: 50
-  updateGizmoMaterial: {fileID: 2100000, guid: a38af07c5abfe8647bd33adc444ba7f2, type: 2}
-  blockAddedColor: {r: 0, g: 1, b: 0, a: 1}
-  blockRemovedColor: {r: 1, g: 0, b: 0, a: 1}
-  blockModifiedColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
-  gizmoDisplayTime: 3
-  gizmoScale: 1.1
-  worldManager: {fileID: 440537099}
 --- !u!114 &1298812160
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1752,8 +1724,8 @@ MonoBehaviour:
   pathfinder: {fileID: 1298812163}
   areaSelectionManager: {fileID: 1298812160}
   structureManager: {fileID: 1298812166}
-  serverUpdateManager: {fileID: 1298812157}
   modernUIManager: {fileID: 996247710}
+  multiTurtleManager: {fileID: 1298812165}
   autoSetupComponents: 1
   createUICanvas: 1
   setupModularTurtleSystem: 1
@@ -1796,6 +1768,10 @@ MonoBehaviour:
   navMeshBuildDelay: 0.5
   autoRebuildOnBlockChange: 1
   maxConcurrentBuilds: 3
+  enableBatchedRebuilds: 1
+  maxBlockChangesBeforeRebuild: 50
+  maxTimeBetweenRebuilds: 1
+  enablePriorityBuilding: 1
   rebakeInterval: 5
   maxPathDistance: 100
   enableVerticalMovement: 1
@@ -1842,6 +1818,7 @@ MonoBehaviour:
   turtlePrefab: {fileID: 8564540265300782765, guid: 5675738dcb7d04c49adb8d9f6ecf9c46, type: 3}
   autoCreateVisuals: 1
   spawnHeight: 0.5
+  worldYOffset: 0
 --- !u!114 &1298812166
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2153,7 +2130,6 @@ GameObject:
   - component: {fileID: 2128933482}
   - component: {fileID: 2128933481}
   - component: {fileID: 2128933480}
-  - component: {fileID: 2128933479}
   m_Layer: 0
   m_Name: TurtleManager
   m_TagString: Untagged
@@ -2161,27 +2137,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &2128933479
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2128933478}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: de650c7bf6467044e963600102e1547e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  enableSequentialValidation: 1
-  optimizeForLayeredMining: 1
-  blockDependencyRadius: 50
-  maxDependencyDepth: 10
-  strategy: 2
-  allowDiagonalAccess: 0
-  requireGroundAccess: 0
-  worldManager: {fileID: 440537099}
-  pathfinder: {fileID: 1298812163}
 --- !u!114 &2128933480
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2222,11 +2177,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ccbad4ff2cba3fc449b66db4c7aaf16c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  enableMiningOptimization: 1
-  validateBlocksBeforeMining: 1
-  blockValidationRadius: 50
   miningPositionTolerance: 0.1
-  columnOptimizer: {fileID: 0}
+  maxRetryPasses: 3
 --- !u!114 &2128933483
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2291,7 +2243,7 @@ MonoBehaviour:
   miningManager: {fileID: 2128933482}
   buildingManager: {fileID: 2128933481}
   operationManager: {fileID: 2128933480}
-  worldManager: {fileID: 0}
+  worldManager: {fileID: 440537099}
   autoFindComponents: 1
   enableIntegratedLogging: 1
 --- !u!4 &2128933486

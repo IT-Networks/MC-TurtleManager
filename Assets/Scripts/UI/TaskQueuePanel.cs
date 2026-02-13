@@ -273,6 +273,32 @@ public class TaskQueuePanel : MonoBehaviour
         }
     }
 
+    public void OnOperationStarted(TurtleOperationManager.OperationType type)
+    {
+        var task = tasks.FirstOrDefault(t => t.status == TaskStatus.Pending && MatchesOperationType(t.type, type));
+        if (task != null)
+        {
+            task.status = TaskStatus.Active;
+            Debug.Log($"Task #{task.id} marked Active (operation: {type})");
+        }
+    }
+
+    public void OnOperationCompleted(TurtleOperationManager.OperationType type, OperationStats stats)
+    {
+        var task = tasks.FirstOrDefault(t => t.status == TaskStatus.Active && MatchesOperationType(t.type, type));
+        if (task != null)
+        {
+            CompleteTask(task);
+            Debug.Log($"Task #{task.id} completed (operation: {type}, success: {stats.SuccessfulBlocks}/{stats.TotalAttempted})");
+        }
+    }
+
+    private static bool MatchesOperationType(TaskType taskType, TurtleOperationManager.OperationType opType)
+    {
+        return (taskType == TaskType.Mining && opType == TurtleOperationManager.OperationType.Mining) ||
+               (taskType == TaskType.Building && opType == TurtleOperationManager.OperationType.Building);
+    }
+
     private void ClearCompletedTasks()
     {
         var completed = tasks.Where(t => t.status == TaskStatus.Completed).ToList();

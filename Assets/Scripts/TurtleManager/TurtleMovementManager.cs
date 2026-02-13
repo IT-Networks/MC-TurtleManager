@@ -201,12 +201,11 @@ public class TurtleMovementManager : MonoBehaviour
                     baseManager.QueueCommand(new TurtleCommand("dig", baseManager.defaultTurtleId));
                     yield return new WaitUntil(() => !baseManager.IsBusy);
 
-                    // Remove block from world
+                    // Remove block from data (no per-block mesh regen)
                     if (baseManager.worldManager != null)
                     {
                         var chunk = baseManager.worldManager.GetChunkContaining(nextPos);
-                        chunk?.GetChunkInfo()?.RemoveBlockAt(nextPos);
-                        baseManager.worldManager.RemoveBlockAtWorldPosition(nextPos);
+                        chunk?.RemoveBlockFromData(nextPos);
                     }
                 }
 
@@ -227,12 +226,11 @@ public class TurtleMovementManager : MonoBehaviour
                     baseManager.QueueCommand(new TurtleCommand("dig", baseManager.defaultTurtleId));
                     yield return new WaitUntil(() => !baseManager.IsBusy);
 
-                    // Remove block from world
+                    // Remove block from data (no per-block mesh regen)
                     if (baseManager.worldManager != null)
                     {
                         var chunk = baseManager.worldManager.GetChunkContaining(nextPos);
-                        chunk?.GetChunkInfo()?.RemoveBlockAt(nextPos);
-                        baseManager.worldManager.RemoveBlockAtWorldPosition(nextPos);
+                        chunk?.RemoveBlockFromData(nextPos);
                     }
                 }
 
@@ -251,12 +249,11 @@ public class TurtleMovementManager : MonoBehaviour
                         baseManager.QueueCommand(new TurtleCommand("digup", baseManager.defaultTurtleId));
                         yield return new WaitUntil(() => !baseManager.IsBusy);
 
-                        // Remove block from world
+                        // Remove block from data (no per-block mesh regen)
                         if (baseManager.worldManager != null)
                         {
                             var chunk = baseManager.worldManager.GetChunkContaining(nextPos);
-                            chunk?.GetChunkInfo()?.RemoveBlockAt(nextPos);
-                            baseManager.worldManager.RemoveBlockAtWorldPosition(nextPos);
+                            chunk?.RemoveBlockFromData(nextPos);
                         }
                     }
 
@@ -273,12 +270,11 @@ public class TurtleMovementManager : MonoBehaviour
                         baseManager.QueueCommand(new TurtleCommand("digdown", baseManager.defaultTurtleId));
                         yield return new WaitUntil(() => !baseManager.IsBusy);
 
-                        // Remove block from world
+                        // Remove block from data (no per-block mesh regen)
                         if (baseManager.worldManager != null)
                         {
                             var chunk = baseManager.worldManager.GetChunkContaining(nextPos);
-                            chunk?.GetChunkInfo()?.RemoveBlockAt(nextPos);
-                            baseManager.worldManager.RemoveBlockAtWorldPosition(nextPos);
+                            chunk?.RemoveBlockFromData(nextPos);
                         }
                     }
 
@@ -330,12 +326,11 @@ public class TurtleMovementManager : MonoBehaviour
                     baseManager.QueueCommand(new TurtleCommand("digup", baseManager.defaultTurtleId));
                     yield return new WaitUntil(() => !baseManager.IsBusy);
 
-                    // Remove block from world
+                    // Remove block from data (no per-block mesh regen)
                     if (baseManager.worldManager != null)
                     {
                         var chunk = baseManager.worldManager.GetChunkContaining(to);
-                        chunk?.GetChunkInfo()?.RemoveBlockAt(to);
-                        baseManager.worldManager.RemoveBlockAtWorldPosition(to);
+                        chunk?.RemoveBlockFromData(to);
                     }
                 }
                 baseManager.QueueCommand(new TurtleCommand("up", baseManager.defaultTurtleId));
@@ -349,12 +344,11 @@ public class TurtleMovementManager : MonoBehaviour
                     baseManager.QueueCommand(new TurtleCommand("digdown", baseManager.defaultTurtleId));
                     yield return new WaitUntil(() => !baseManager.IsBusy);
 
-                    // Remove block from world
+                    // Remove block from data (no per-block mesh regen)
                     if (baseManager.worldManager != null)
                     {
                         var chunk = baseManager.worldManager.GetChunkContaining(to);
-                        chunk?.GetChunkInfo()?.RemoveBlockAt(to);
-                        baseManager.worldManager.RemoveBlockAtWorldPosition(to);
+                        chunk?.RemoveBlockFromData(to);
                     }
                 }
                 baseManager.QueueCommand(new TurtleCommand("down", baseManager.defaultTurtleId));
@@ -373,12 +367,11 @@ public class TurtleMovementManager : MonoBehaviour
                 baseManager.QueueCommand(new TurtleCommand("dig", baseManager.defaultTurtleId));
                 yield return new WaitUntil(() => !baseManager.IsBusy);
 
-                // Remove block from world
+                // Remove block from data (no per-block mesh regen)
                 if (baseManager.worldManager != null)
                 {
                     var chunk = baseManager.worldManager.GetChunkContaining(to);
-                    chunk?.GetChunkInfo()?.RemoveBlockAt(to);
-                    baseManager.worldManager.RemoveBlockAtWorldPosition(to);
+                    chunk?.RemoveBlockFromData(to);
                 }
             }
 

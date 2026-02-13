@@ -7,7 +7,7 @@ using UnityEngine;
 using UnityEngine.Networking;
 
 /// <summary>
-/// ChunkManager mit minimalen Anpassungen für NavMesh-Integration
+/// ChunkManager with minimal adjustments for NavMesh integration
 /// </summary>
 public class ChunkManager
 {
@@ -31,7 +31,7 @@ public class ChunkManager
     private readonly ChunkMeshBuilder meshBuilder;
     private readonly ChunkUVProvider uvProvider;
 
-    // Block-Management Eigenschaften
+    // Block management state
     private ChunkMeshData currentMeshData;
     private bool isRegenerating = false;
 
@@ -46,9 +46,6 @@ public class ChunkManager
         this.jsonParser = new ChunkJsonParser(coord, chunkSize);
         this.uvProvider = new ChunkUVProvider(1);
         this.meshBuilder = new ChunkMeshBuilder(uvProvider);
-
-        // Set world manager for cross-chunk face culling
-        this.meshBuilder.SetWorldManager(manager);
 
         CreateGameObject();
         RegisterWithWorldManager();
@@ -236,75 +233,56 @@ public class ChunkManager
                 }
                 else
                 {
-                    currentMeshData = cachedData;
-
-                    // Build mesh on background thread
-                    PreparedChunkMesh cachedMesh = null;
-                    string errorMessage = null;
-                    Task buildTask = Task.Run(() =>
-                    {
-                        try
-                        {
-                            cachedMesh = meshBuilder.BuildMeshFromData(cachedData, chunk);
-                        }
-                        catch (System.Exception ex)
-                        {
-                            errorMessage = $"Exception during cached mesh building: {ex.Message}\n{ex.StackTrace}";
-                        }
-                    });
-
-                    yield return new WaitUntil(() => buildTask.IsCompleted);
-
-                    if (cachedMesh == null)
-                    {
-                        Debug.LogError($"Chunk {coord}: Failed to build mesh from cached data. {errorMessage}");
-                        yield break;
-                    }
-
-                    yield return CoroutineHelper.Instance.StartCoroutine(ApplyPreparedMesh(cachedMesh, batchVerticesPerFrame));
-
-                    // Notifiziere über geladenen Chunk
-                    NotifyChunkLoaded();
+                    yield return CoroutineHelper.Instance.StartCoroutine(
+                        BuildCachedMeshAndApply(cachedData, batchVerticesPerFrame));
                     yield break;
                 }
             }
             else
             {
-                currentMeshData = cachedData;
-
-                // Build mesh on background thread
-                PreparedChunkMesh cachedMesh = null;
-                string errorMessage = null;
-                Task buildTask = Task.Run(() =>
-                {
-                    try
-                    {
-                        cachedMesh = meshBuilder.BuildMeshFromData(cachedData, chunk);
-                    }
-                    catch (System.Exception ex)
-                    {
-                        errorMessage = $"Exception during cached mesh building: {ex.Message}\n{ex.StackTrace}";
-                    }
-                });
-
-                yield return new WaitUntil(() => buildTask.IsCompleted);
-
-                if (cachedMesh == null)
-                {
-                    Debug.LogError($"Chunk {coord}: Failed to build mesh from cached data. {errorMessage}");
-                    yield break;
-                }
-
-                yield return CoroutineHelper.Instance.StartCoroutine(ApplyPreparedMesh(cachedMesh, batchVerticesPerFrame));
-
-                // Notifiziere über geladenen Chunk
-                NotifyChunkLoaded();
+                yield return CoroutineHelper.Instance.StartCoroutine(
+                    BuildCachedMeshAndApply(cachedData, batchVerticesPerFrame));
                 yield break;
             }
         }
 
         // 2. Download and parse JSON data
         yield return CoroutineHelper.Instance.StartCoroutine(DownloadAndProcessChunk(batchVerticesPerFrame));
+    }
+
+    /// <summary>
+    /// Builds mesh from cached data on a background thread and applies it.
+    /// </summary>
+    private IEnumerator BuildCachedMeshAndApply(ChunkMeshData cachedData, int batchVerticesPerFrame)
+    {
+        currentMeshData = cachedData;
+
+        // Snapshot adjacent chunks on main thread for thread-safe face culling
+        var adjData = SnapshotAdjacentChunkData();
+        PreparedChunkMesh cachedMesh = null;
+        string errorMessage = null;
+        Task buildTask = Task.Run(() =>
+        {
+            try
+            {
+                cachedMesh = meshBuilder.BuildMeshFromData(cachedData, adjData);
+            }
+            catch (System.Exception ex)
+            {
+                errorMessage = $"Exception during cached mesh building: {ex.Message}\n{ex.StackTrace}";
+            }
+        });
+
+        yield return new WaitUntil(() => buildTask.IsCompleted);
+
+        if (cachedMesh == null)
+        {
+            Debug.LogError($"Chunk {coord}: Failed to build mesh from cached data. {errorMessage}");
+            yield break;
+        }
+
+        yield return CoroutineHelper.Instance.StartCoroutine(ApplyPreparedMesh(cachedMesh, batchVerticesPerFrame));
+        NotifyChunkLoaded();
     }
 
     private IEnumerator DownloadAndProcessChunk(int batchVerticesPerFrame)
@@ -323,6 +301,8 @@ public class ChunkManager
         string json = req.downloadHandler.text;
 
         // 3. Parse JSON and build mesh on background thread
+        // Snapshot adjacent chunks on main thread for thread-safe face culling
+        var adjData3 = SnapshotAdjacentChunkData();
         ChunkMeshData meshData = null;
         CacheWriteData cacheWrite = null;
         PreparedChunkMesh prepared = null;
@@ -337,8 +317,8 @@ public class ChunkManager
 
                 if (meshData != null)
                 {
-                    // Build mesh from parsed data (async)
-                    prepared = meshBuilder.BuildMeshFromData(meshData, chunk);
+                    // Build mesh from parsed data (background thread)
+                    prepared = meshBuilder.BuildMeshFromData(meshData, adjData3);
                 }
                 else
                 {
@@ -386,7 +366,7 @@ public class ChunkManager
         // 5. Apply mesh to GameObject (on main thread)
         yield return CoroutineHelper.Instance.StartCoroutine(ApplyPreparedMesh(prepared, batchVerticesPerFrame));
 
-        // 6. Notifiziere über geladenen Chunk
+        // 6. Notify that chunk is loaded
         NotifyChunkLoaded();
     }
 
@@ -441,16 +421,32 @@ public class ChunkManager
     }
 
     /// <summary>
-    /// Benachrichtigt das System, dass der Chunk vollständig geladen wurde
+    /// Notifies the system that the chunk has been fully loaded.
     /// </summary>
     private void NotifyChunkLoaded()
     {
-        // Event für Chunk geladen (wird vom BlockWorldPathfinder abgehört)
+        // Chunk loaded event (listened to by BlockWorldPathfinder)
         manager?.OnChunkLoaded?.Invoke(coord);
     }
 
     /// <summary>
-    /// Löscht einen Block und regeneriert den Mesh
+    /// Removes a block from both ChunkMeshData and ChunkInfo without mesh regeneration.
+    /// Used during batch mining where mesh regen happens once at the end.
+    /// </summary>
+    public bool RemoveBlockFromData(Vector3 worldPosition)
+    {
+        if (currentMeshData == null) return false;
+
+        Vector3Int localPos = WorldToLocalPosition(worldPosition);
+        if (!IsValidLocalPosition(localPos)) return false;
+
+        currentMeshData.SetBlock(localPos.x, localPos.y, localPos.z, null);
+        chunk?.RemoveBlockAt(worldPosition);
+        return true;
+    }
+
+    /// <summary>
+    /// Removes a block and regenerates the mesh.
     /// </summary>
     public bool RemoveBlockAndRegenerate(Vector3 worldPosition, int batchVerticesPerFrame = 10000)
     {
@@ -474,11 +470,12 @@ public class ChunkManager
             return false;
         }
 
-        // Entferne den Block
+        // Remove the block
         currentMeshData.SetBlock(localPos.x, localPos.y, localPos.z, null);
         chunk.RemoveBlockAt(worldPosition);
 
-        // Starte die Mesh-Regenerierung
+        // Set flag immediately to prevent TOCTOU race with concurrent callers
+        isRegenerating = true;
         CoroutineHelper.Instance.StartCoroutine(RegenerateMeshCoroutine(batchVerticesPerFrame));
         
         Debug.Log($"Chunk {coord}: Block removed at {worldPosition}, regenerating mesh");
@@ -492,30 +489,26 @@ public class ChunkManager
     public void RegenerateMesh(int batchVerticesPerFrame = 10000)
     {
         if (currentMeshData == null || isRegenerating) return;
+        isRegenerating = true;
         CoroutineHelper.Instance.StartCoroutine(RegenerateMeshCoroutine(batchVerticesPerFrame));
     }
 
     /// <summary>
-    /// Regeneriert den Mesh basierend auf den aktuellen Mesh-Daten
+    /// Regenerates the mesh based on current mesh data.
+    /// Callers must set isRegenerating = true before starting this coroutine.
     /// </summary>
     private IEnumerator RegenerateMeshCoroutine(int batchVerticesPerFrame)
     {
-        if (isRegenerating)
-        {
-            yield break;
-        }
-
-        isRegenerating = true;
-
         try
         {
             chunk.ClearBlocks();
 
-            // Build mesh on background thread
+            // Snapshot adjacent chunks on main thread for thread-safe face culling
+            var adjData4 = SnapshotAdjacentChunkData();
             PreparedChunkMesh prepared = null;
             Task buildTask = Task.Run(() =>
             {
-                prepared = meshBuilder.BuildMeshFromData(currentMeshData, chunk);
+                prepared = meshBuilder.BuildMeshFromData(currentMeshData, adjData4);
             });
 
             yield return new WaitUntil(() => buildTask.IsCompleted);
@@ -544,8 +537,7 @@ public class ChunkManager
         {
             isRegenerating = false;
 
-            // Benachrichtige über Regenerierung abgeschlossen
-            // Dies wird vom BlockWorldPathfinder genutzt um das NavMesh zu aktualisieren
+            // Notify that regeneration is complete (used by BlockWorldPathfinder to update NavMesh)
             manager?.OnChunkRegenerated?.Invoke(coord);
         }
     }
@@ -553,9 +545,9 @@ public class ChunkManager
     private Vector3Int WorldToLocalPosition(Vector3 worldPosition)
     {
         int localX = Mathf.FloorToInt(-worldPosition.x) - (coord.x * chunkSize);
-        // KRITISCHER FIX: Y-Offset von 128 hinzufügen wie in ChunkMeshData.WorldToLocalPosition
-        // Unity-Weltkoordinaten: Y=0 entspricht Minecraft Y=-128
-        // ChunkMeshBuilder speichert Blöcke mit y-128 in ChunkInfo
+        // CRITICAL FIX: Add Y-offset of 128 as in ChunkMeshData.WorldToLocalPosition
+        // Unity world coordinates: Y=0 corresponds to Minecraft Y=-128
+        // ChunkMeshBuilder stores blocks with y-128 in ChunkInfo
         int localY = Mathf.FloorToInt(worldPosition.y + 128);
         int localZ = Mathf.FloorToInt(worldPosition.z) - (coord.y * chunkSize);
 
@@ -586,7 +578,9 @@ public class ChunkManager
         }
 
         currentMeshData.SetBlock(localPos.x, localPos.y, localPos.z, blockType);
-        
+
+        // Set flag immediately to prevent TOCTOU race with concurrent callers
+        isRegenerating = true;
         CoroutineHelper.Instance.StartCoroutine(RegenerateMeshCoroutine(batchVerticesPerFrame));
         
         Debug.Log($"Chunk {coord}: Block '{blockType}' added at {worldPosition}, regenerating mesh");
@@ -603,14 +597,39 @@ public class ChunkManager
     public bool IsRegenerating => isRegenerating;
     public int VertexCount => _mf?.sharedMesh?.vertexCount ?? 0;
     public int SubmeshCount => _mf?.sharedMesh?.subMeshCount ?? 0;
+    public ChunkMeshData GetCurrentMeshData() => currentMeshData;
 
     // Thread-safe accessor for ChunkInfo
     public ChunkInfo GetChunkInfo() => chunk;
+
+    /// <summary>
+    /// Snapshots adjacent chunk edge data on the main thread for thread-safe
+    /// cross-chunk face culling inside Task.Run().
+    /// </summary>
+    private Dictionary<Vector2Int, ChunkMeshData> SnapshotAdjacentChunkData()
+    {
+        var result = new Dictionary<Vector2Int, ChunkMeshData>(4);
+        Vector2Int[] offsets = { new(1, 0), new(-1, 0), new(0, 1), new(0, -1) };
+
+        foreach (var offset in offsets)
+        {
+            var adjCoord = coord + offset;
+            var adjChunk = manager.GetChunkAt(adjCoord);
+            if (adjChunk != null && adjChunk.IsLoaded)
+            {
+                var adjMeshData = adjChunk.GetCurrentMeshData();
+                if (adjMeshData != null)
+                    result[adjCoord] = adjMeshData;
+            }
+        }
+
+        return result;
+    }
 }
 
 // Extension methods - removed GetChunkInfo as it's now an instance method
 
-// CoroutineHelper bleibt unverändert
+// CoroutineHelper remains unchanged
 public class CoroutineHelper : MonoBehaviour
 {
     private static CoroutineHelper _instance;
