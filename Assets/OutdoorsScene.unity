@@ -739,18 +739,9 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: aca718ac8eaf5b641b3bf8599dcbf447, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ModernUIBuilder
-  buildUIOnStart: 1
-  defaultFont: {fileID: 12800000, guid: 997a43b767814dd0a7642ec9b78cba41, type: 3}
-  tmpFont: {fileID: 11400000, guid: 8a89fa14b10d46a99122fd4f73fca9a2, type: 2}
-  panelColor: {r: 0.1, g: 0.1, b: 0.1, a: 0.9}
-  buttonColor: {r: 0.2, g: 0.2, b: 0.2, a: 1}
-  buttonHighlightColor: {r: 0.3, g: 0.3, b: 0.3, a: 1}
-  textColor: {r: 1, g: 1, b: 1, a: 1}
-  defaultFontSize: 14
-  modernUIManager: {fileID: 879930426}
---- !u!114 &879930426
-MonoBehaviour:
+  m_EditorClassIdentifier: 
+--- !u!4 &879930424
+Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -1684,7 +1675,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   cameraController: {fileID: 1174312244}
-  turtleMainController: {fileID: 2128933485}
+  turtleMainController: {fileID: 0}
   turtleSelectionManager: {fileID: 1298812164}
   pathfinder: {fileID: 1298812163}
   selectionLayerMask:
@@ -1715,17 +1706,17 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   worldManager: {fileID: 440537099}
   cameraController: {fileID: 1174312244}
-  turtleMainController: {fileID: 2128933485}
-  turtleBaseManager: {fileID: 2128933484}
-  turtleMovementManager: {fileID: 2128933483}
-  turtleMiningManager: {fileID: 2128933482}
-  turtleBuildingManager: {fileID: 2128933481}
-  turtleOperationManager: {fileID: 2128933480}
+  turtleMainController: {fileID: 0}
+  turtleBaseManager: {fileID: 0}
+  turtleMovementManager: {fileID: 0}
+  turtleMiningManager: {fileID: 0}
+  turtleBuildingManager: {fileID: 0}
+  turtleOperationManager: {fileID: 0}
   pathfinder: {fileID: 1298812163}
   areaSelectionManager: {fileID: 1298812160}
   structureManager: {fileID: 1298812166}
   modernUIManager: {fileID: 996247710}
-  multiTurtleManager: {fileID: 1298812165}
+  multiTurtleManager: {fileID: 0}
   autoSetupComponents: 1
   createUICanvas: 1
   setupModularTurtleSystem: 1
@@ -2124,12 +2115,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2128933486}
-  - component: {fileID: 2128933485}
-  - component: {fileID: 2128933484}
-  - component: {fileID: 2128933483}
-  - component: {fileID: 2128933482}
-  - component: {fileID: 2128933481}
-  - component: {fileID: 2128933480}
+  - component: {fileID: 2128933489}
+  - component: {fileID: 2128933488}
+  - component: {fileID: 2128933487}
   m_Layer: 0
   m_Name: TurtleManager
   m_TagString: Untagged
@@ -2137,115 +2125,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &2128933480
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2128933478}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b3988455621b2c74cbd1fc3c9fb34fb0, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  enableDetailedLogging: 1
---- !u!114 &2128933481
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2128933478}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 77d36d09c9a882148940da37b94417a2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  groupNearbyOperations: 1
-  operationGroupingDistance: 5
-  buildingPositionTolerance: 0.1
---- !u!114 &2128933482
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2128933478}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ccbad4ff2cba3fc449b66db4c7aaf16c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  miningPositionTolerance: 0.1
-  maxRetryPasses: 3
---- !u!114 &2128933483
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2128933478}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5a69710c99cab1a41b7d0af006a21c1c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  pathfinder: {fileID: 1298812163}
-  usePathfinding: 1
-  defaultPathfindingOptions:
-    canFly: 1
-    allowDiagonal: 0
-    maxStepHeight: 1
-    maxPathLength: 1000
-    optimizePath: 1
-    removeRedundantMoves: 1
-    maxOptimizationPasses: 3
-  validateMovementBeforeExecution: 1
-  positionTolerance: 0.1
-  maxMovementRetries: 3
-  enableAutoExcavation: 0
-  showExcavationWarnings: 1
---- !u!114 &2128933484
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2128933478}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6c4ec9922b114104390ed5a968cbcd25, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  turtleCommandUrl: http://192.168.178.211:4999/commands
-  turtleStatusUrl: http://192.168.178.211:4999/status
-  commandDelay: 1.2
-  maxRetries: 3
-  debugCommands: 1
-  defaultTurtleId: TurtleSlave
-  positionUpdateDelay: 0.3
-  worldManager: {fileID: 440537099}
---- !u!114 &2128933485
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2128933478}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 91a76dbdd3882474da38a751f921ef46, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  baseManager: {fileID: 2128933484}
-  movementManager: {fileID: 2128933483}
-  miningManager: {fileID: 2128933482}
-  buildingManager: {fileID: 2128933481}
-  operationManager: {fileID: 2128933480}
-  worldManager: {fileID: 440537099}
-  autoFindComponents: 1
-  enableIntegratedLogging: 1
 --- !u!4 &2128933486
 Transform:
   m_ObjectHideFlags: 0
@@ -2261,6 +2140,74 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2128933487
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2128933478}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 05dbcb9da11d7ee48a507e52577fd294, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TurtleWorldManager
+  standardBlockMaterial: {fileID: 0}
+  waterMaterial: {fileID: 0}
+  leavesMaterial: {fileID: 0}
+  turtlePrefab: {fileID: 0}
+  textureResourceFolder: Textures/Minecraft
+  blockDataUrl: http://localhost:4567/chunkdata?radius=0
+  chunkUpdateUrl: http://localhost:4567/chunkupdate?
+  statusUrl: http://192.168.178.211:4999/status/all
+  chunkSize: 16
+  chunkLoadRadius: 2
+  chunkRefreshInterval: 0.5
+  useFrustumBasedLoading: 1
+  frustumBufferRings: 1
+  maxFrustumCheckDistance: 15
+  useMovementPrioritization: 1
+  cancelLoadingOnMovement: 0
+  movementThreshold: 2
+  useChunkPooling: 1
+  enableMeshCaching: 1
+  maxPooledChunks: 100
+  enableBlockInteractions: 1
+  maxConcurrentRegenerations: 3
+  autoSyncToServer: 0
+--- !u!114 &2128933488
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2128933478}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a6ddaf0d10a20854dac3937064262394, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TurtleSelectionManager
+  allowMultiSelect: 1
+  multiSelectKey: 306
+  turtleManager: {fileID: 0}
+--- !u!114 &2128933489
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2128933478}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 065b2956a037c484bb98eb242ac1c723, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MultiTurtleManager
+  statusUrl: http://192.168.178.211:4999/status/all
+  updateInterval: 1
+  turtlePrefab: {fileID: 8564540265300782765, guid: 5675738dcb7d04c49adb8d9f6ecf9c46, type: 3}
+  autoCreateVisuals: 1
+  spawnHeight: 0.5
+  worldYOffset: 64
 --- !u!1001 &2323185282517793489
 PrefabInstance:
   m_ObjectHideFlags: 0

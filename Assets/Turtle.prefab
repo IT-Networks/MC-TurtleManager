@@ -472,7 +472,6 @@ GameObject:
   - component: {fileID: 3211649425784810523}
   - component: {fileID: 79701900657673354}
   - component: {fileID: 7503242417180392274}
-  - component: {fileID: 2535215271816191904}
   m_Layer: 0
   m_Name: Turtle
   m_TagString: Untagged
@@ -576,31 +575,3 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1, y: 1, z: 1}
   m_Center: {x: 0, y: 0, z: 0}
---- !u!114 &2535215271816191904
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8564540265300782765}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b5df8e24640ee314fba09de29d910cc8, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  selectedColor: {r: 0, g: 0.9528302, b: 0, a: 1}
-  serverUrl: http://192.168.178.211:4999
-  isMoving: 0
-  isRefueling: 0
-  rotationSpeed: 180
-  moveSpeed: 0.9
-  moveHeight: 0.5
-  refuelPos: {x: 1022, y: -397, z: -5}
-  useTeleportForRefuel: 1
-  status:
-    id: 0
-    label: 
-    position: {x: 0, y: 0, z: 0}
-    direction: 
-    fuel: 0
-    status: 
