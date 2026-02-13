@@ -115,6 +115,12 @@ public class TurtleMiningManager : MonoBehaviour
                 Vector3 blockPos = remaining[i];
                 bool sameColumn = i > 0 && IsSameColumn(lastBlock, blockPos);
 
+                // On column transition, check if any deferred blocks now have accessible neighbors
+                if (!sameColumn && i > 0 && deferred.Count > 0)
+                {
+                    RetryDeferredBlocks(deferred, remaining, i);
+                }
+
                 // If first block of column was unreachable, defer rest of column too
                 if (sameColumn && skipColumn)
                 {
@@ -217,17 +223,14 @@ public class TurtleMiningManager : MonoBehaviour
 
         yield return new WaitUntil(() => !baseManager.IsBusy);
 
-        // Update world state: remove block from ChunkInfo so pathfinding
-        // knows this position is now air. Single lookup, no mesh regeneration
-        // per block (too expensive during batch mining).
+        // Update world state: remove block from both ChunkMeshData and ChunkInfo
+        // so pathfinding knows this position is now air AND mesh regeneration
+        // won't re-add the block. No per-block mesh regen (too expensive during batch mining).
         var worldManager = baseManager.worldManager;
         if (worldManager != null)
         {
             var chunk = worldManager.GetChunkContaining(blockPosition);
-            if (chunk != null)
-            {
-                chunk.GetChunkInfo()?.RemoveBlockAt(blockPosition);
-            }
+            chunk?.RemoveBlockFromData(blockPosition);
         }
     }
 
@@ -253,6 +256,63 @@ public class TurtleMiningManager : MonoBehaviour
                 chunk.RegenerateMesh();
             }
         }
+    }
+
+    /// <summary>
+    /// Checks deferred blocks for newly accessible neighbors (from just-mined blocks
+    /// creating air). Moves matches back into the remaining work list.
+    /// </summary>
+    private void RetryDeferredBlocks(List<Vector3> deferred, List<Vector3> remaining, int insertIndex)
+    {
+        var recovered = new List<Vector3>();
+
+        for (int j = deferred.Count - 1; j >= 0; j--)
+        {
+            if (HasAccessibleNeighbor(deferred[j]))
+            {
+                recovered.Add(deferred[j]);
+                deferred.RemoveAt(j);
+            }
+        }
+
+        if (recovered.Count > 0)
+        {
+            // Re-sort recovered blocks into columns (top-down)
+            recovered.Sort((a, b) => b.y.CompareTo(a.y));
+            remaining.InsertRange(insertIndex, recovered);
+            Debug.Log($"Intra-pass retry: {recovered.Count} deferred blocks now reachable");
+        }
+    }
+
+    private bool HasAccessibleNeighbor(Vector3 blockPos)
+    {
+        Vector3[] neighbors =
+        {
+            blockPos + Vector3.up,
+            blockPos + Vector3.down,
+            blockPos + Vector3.right,
+            blockPos + Vector3.left,
+            blockPos + Vector3.forward,
+            blockPos + Vector3.back
+        };
+
+        var worldManager = baseManager.worldManager;
+        if (worldManager == null) return false;
+
+        foreach (var neighbor in neighbors)
+        {
+            var chunk = worldManager.GetChunkContaining(neighbor);
+            if (chunk == null || !chunk.IsLoaded) continue;
+
+            var chunkInfo = chunk.GetChunkInfo();
+            if (chunkInfo == null) continue;
+
+            var blockType = chunkInfo.GetBlockTypeAt(neighbor);
+            if (string.IsNullOrEmpty(blockType) || blockType.ToLowerInvariant().Contains("air"))
+                return true;
+        }
+
+        return false;
     }
 
     #endregion

@@ -563,7 +563,7 @@ public class IntegrationManager : MonoBehaviour
         {
             if (areaSelectionManager.CurrentMode == AreaSelectionManager.SelectionMode.Mining)
             {
-                var plan = turtleMainController.PrepareMiningOperation(areaSelectionManager.SelectedBlocks);
+                var plan = turtleMainController.PrepareMiningOperation(new List<Vector3>(areaSelectionManager.SelectedBlocks));
                 if (plan.isValid)
                 {
                     recommendations.Add($"Execute mining operation ({plan.validBlockCount} valid blocks)");

@@ -29,6 +29,17 @@ public class BuildModeManager : MonoBehaviour
     private GameObject previewObject;
     private bool isPlacementValid;
 
+    // Performance: cached renderers and shared material to avoid per-frame allocations
+    private Renderer[] _cachedRenderers;
+    private Material _sharedPreviewMaterial;
+
+    // Performance: cache validity result for same grid position
+    private Vector3 _lastValidityCheckPos = new Vector3(float.NaN, float.NaN, float.NaN);
+    private bool _lastValidityResult;
+
+    // Performance: reusable buffer for OverlapBox to avoid allocation
+    private static readonly Collider[] _overlapBuffer = new Collider[1];
+
     private void Start()
     {
         if (areaSelectionManager == null)
@@ -59,6 +70,7 @@ public class BuildModeManager : MonoBehaviour
     public void SetStructureToBuild(StructureData structure)
     {
         currentStructure = structure;
+        _lastValidityCheckPos = new Vector3(float.NaN, float.NaN, float.NaN); // Invalidate cache
 
         if (structure != null)
         {
@@ -98,8 +110,13 @@ public class BuildModeManager : MonoBehaviour
                 previewPosition = SnapToGrid(previewPosition, gridSize);
             }
 
-            // Check if placement is valid
-            isPlacementValid = CheckPlacementValidity(previewPosition);
+            // Check if placement is valid (cached — only recalculate when grid position changes)
+            if (previewPosition != _lastValidityCheckPos)
+            {
+                _lastValidityCheckPos = previewPosition;
+                _lastValidityResult = CheckPlacementValidity(previewPosition);
+            }
+            isPlacementValid = _lastValidityResult;
 
             // Update or create preview
             UpdatePreviewVisualization();
@@ -123,20 +140,35 @@ public class BuildModeManager : MonoBehaviour
 
             // Create visual representation of structure
             CreateStructurePreviewMesh(previewObject, currentStructure);
+
+            // Cache renderers once at creation time
+            _cachedRenderers = previewObject.GetComponentsInChildren<Renderer>();
         }
 
         if (previewObject != null)
         {
             previewObject.transform.position = previewPosition;
 
-            // Update color based on validity
-            UpdatePreviewColor(isPlacementValid ? validPlacementColor : invalidPlacementColor);
+            // Update color based on validity using cached renderers
+            Color color = isPlacementValid ? validPlacementColor : invalidPlacementColor;
+            UpdatePreviewColor(color);
         }
     }
 
     private void CreateStructurePreviewMesh(GameObject parent, StructureData structure)
     {
         if (structure == null || structure.blocks == null) return;
+
+        // Create ONE shared material for all preview blocks (was creating per block)
+        _sharedPreviewMaterial = new Material(Shader.Find("Standard"));
+        _sharedPreviewMaterial.SetFloat("_Mode", 3); // Transparent
+        _sharedPreviewMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        _sharedPreviewMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        _sharedPreviewMaterial.SetInt("_ZWrite", 0);
+        _sharedPreviewMaterial.DisableKeyword("_ALPHATEST_ON");
+        _sharedPreviewMaterial.EnableKeyword("_ALPHABLEND_ON");
+        _sharedPreviewMaterial.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+        _sharedPreviewMaterial.renderQueue = 3000;
 
         foreach (var block in structure.blocks)
         {
@@ -148,35 +180,23 @@ public class BuildModeManager : MonoBehaviour
             // Remove collider
             Destroy(blockObj.GetComponent<Collider>());
 
-            // Set transparent preview material
+            // Use shared material instead of creating new per block
             Renderer renderer = blockObj.GetComponent<Renderer>();
             if (renderer != null)
             {
-                Material mat = new Material(Shader.Find("Standard"));
-                mat.SetFloat("_Mode", 3); // Transparent
-                mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-                mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-                mat.SetInt("_ZWrite", 0);
-                mat.DisableKeyword("_ALPHATEST_ON");
-                mat.EnableKeyword("_ALPHABLEND_ON");
-                mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
-                mat.renderQueue = 3000;
-                renderer.material = mat;
+                renderer.sharedMaterial = _sharedPreviewMaterial;
             }
         }
     }
 
     private void UpdatePreviewColor(Color color)
     {
-        if (previewObject == null) return;
+        if (_cachedRenderers == null) return;
 
-        Renderer[] renderers = previewObject.GetComponentsInChildren<Renderer>();
-        foreach (var renderer in renderers)
+        // Update shared material color once (affects all blocks using it)
+        if (_sharedPreviewMaterial != null)
         {
-            if (renderer.material != null)
-            {
-                renderer.material.color = color;
-            }
+            _sharedPreviewMaterial.color = color;
         }
     }
 
@@ -187,7 +207,16 @@ public class BuildModeManager : MonoBehaviour
 
         Vector3Int size = currentStructure.GetSize();
 
-        // Check each block position for collisions
+        // Broad-phase: single AABB check for entire structure bounding box
+        Vector3 boundsCenter = position + new Vector3(size.x * 0.5f, size.y * 0.5f, size.z * 0.5f);
+        Vector3 boundsHalfExtents = new Vector3(size.x * 0.5f, size.y * 0.5f, size.z * 0.5f);
+        int broadPhaseHits = Physics.OverlapBoxNonAlloc(boundsCenter, boundsHalfExtents, _overlapBuffer, Quaternion.identity, collisionCheckLayers);
+        if (broadPhaseHits == 0)
+        {
+            return true; // No collisions anywhere in bounding box — skip per-block checks
+        }
+
+        // Narrow-phase: check individual block positions (only if broad-phase detected something)
         for (int x = 0; x < size.x; x++)
         {
             for (int y = 0; y < size.y; y++)
@@ -196,10 +225,10 @@ public class BuildModeManager : MonoBehaviour
                 {
                     Vector3 checkPos = position + new Vector3(x, y, z);
 
-                    // Check for collisions at this position
-                    Collider[] colliders = Physics.OverlapBox(checkPos, Vector3.one * 0.4f, Quaternion.identity, collisionCheckLayers);
+                    // Use NonAlloc to avoid per-call heap allocation
+                    int hitCount = Physics.OverlapBoxNonAlloc(checkPos, Vector3.one * 0.4f, _overlapBuffer, Quaternion.identity, collisionCheckLayers);
 
-                    if (colliders.Length > 0)
+                    if (hitCount > 0)
                     {
                         return false; // Collision detected
                     }
@@ -237,6 +266,7 @@ public class BuildModeManager : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.R) && previewObject != null)
         {
             previewObject.transform.Rotate(0, 90f, 0);
+            _lastValidityCheckPos = new Vector3(float.NaN, float.NaN, float.NaN); // Invalidate on rotation
         }
     }
 
@@ -271,6 +301,15 @@ public class BuildModeManager : MonoBehaviour
             Destroy(previewObject);
             previewObject = null;
         }
+        _cachedRenderers = null;
+
+        if (_sharedPreviewMaterial != null)
+        {
+            Destroy(_sharedPreviewMaterial);
+            _sharedPreviewMaterial = null;
+        }
+
+        _lastValidityCheckPos = new Vector3(float.NaN, float.NaN, float.NaN);
     }
 
     private void OnDisable()

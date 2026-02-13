@@ -87,8 +87,8 @@ public class TurtleObject : MonoBehaviour
             }
         }
 
-        // Update path visualization if selected and has path
-        if (isSelected && pathLineRenderer != null && pathLineRenderer.enabled)
+        // Update path visualization when renderer is enabled (not just when selected)
+        if (pathLineRenderer != null && pathLineRenderer.enabled)
         {
             UpdatePathVisualization();
         }

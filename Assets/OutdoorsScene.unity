@@ -607,11 +607,11 @@ MonoBehaviour:
   frustumBufferRings: 1
   maxFrustumCheckDistance: 15
   useMovementPrioritization: 1
-  cancelLoadingOnMovement: 1
   movementThreshold: 0.5
   useChunkPooling: 1
   enableMeshCaching: 1
   maxPooledChunks: 100
+  chunkUnloadRadius: 20
   enableBlockInteractions: 1
   maxConcurrentRegenerations: 3
   autoSyncToServer: 0
@@ -704,7 +704,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 879930424}
-  - component: {fileID: 879930423}
+  - component: {fileID: 879930426}
+  - component: {fileID: 879930425}
   m_Layer: 0
   m_Name: ConstructionUIBuilder
   m_TagString: Untagged
@@ -712,18 +713,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &879930423
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 879930422}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a5541f2e2607ff947b12c821ec9b482e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!4 &879930424
 Transform:
   m_ObjectHideFlags: 0
@@ -739,6 +728,51 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &879930425
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 879930422}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aca718ac8eaf5b641b3bf8599dcbf447, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!4 &879930424
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 879930422}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 870295a5a749568439a9340b26e2960b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ModernUIManager
+  mainUICanvas: {fileID: 0}
+  contextMenuPanel: {fileID: 0}
+  turtleListPanel: {fileID: 0}
+  taskQueuePanel: {fileID: 0}
+  quickActionsPanel: {fileID: 0}
+  structureSelectionPanel: {fileID: 0}
+  aiPromptPanel: {fileID: 0}
+  turtleManager: {fileID: 0}
+  selectionManager: {fileID: 0}
+  areaSelectionManager: {fileID: 0}
+  cameraController: {fileID: 0}
+  structureManager: {fileID: 0}
+  buildModeManager: {fileID: 0}
+  contextMenu: {fileID: 0}
+  turtleList: {fileID: 0}
+  taskQueue: {fileID: 0}
+  structureSelection: {fileID: 0}
+  aiPrompt: {fileID: 0}
+  contextMenuKey: 324
+  enableHotkeys: 1
+  selectionStatusText: {fileID: 0}
 --- !u!1 &978573711
 GameObject:
   m_ObjectHideFlags: 0
