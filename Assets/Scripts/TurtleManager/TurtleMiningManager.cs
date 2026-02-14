@@ -93,6 +93,10 @@ public class TurtleMiningManager : MonoBehaviour
             Debug.Log($"Pinned {pinnedChunks.Count} chunks for mining operation");
         }
 
+        // If the top-most blocks are completely enclosed (no air neighbors),
+        // dig a vertical shaft down to the mining area to create access
+        yield return StartCoroutine(DigShaftToAreaIfNeeded(remaining, minedChunks));
+
         for (int pass = 0; pass < maxRetryPasses && remaining.Count > 0; pass++)
         {
             if (pass > 0)
@@ -132,7 +136,33 @@ public class TurtleMiningManager : MonoBehaviour
 
                 if (sameColumn)
                 {
-                    yield return StartCoroutine(ExecuteDig(blockPos));
+                    // Column mining: turtle must move into the previously mined space
+                    // before it can dig the next block below/above.
+                    // digdown only reaches 1 block below, so we must descend step by step.
+                    Vector3 turtlePos = baseManager.GetTurtlePosition();
+                    bool isDirectlyAbove = Mathf.RoundToInt(turtlePos.x) == Mathf.RoundToInt(blockPos.x) &&
+                                           Mathf.RoundToInt(turtlePos.z) == Mathf.RoundToInt(blockPos.z) &&
+                                           turtlePos.y > blockPos.y + 0.5f;
+
+                    if (isDirectlyAbove)
+                    {
+                        // Move down into previously mined space (now air)
+                        baseManager.QueueCommand(new TurtleCommand("down", baseManager.defaultTurtleId));
+                        yield return new WaitUntil(() => !baseManager.IsBusy);
+                        yield return StartCoroutine(ExecuteDig(blockPos));
+                    }
+                    else
+                    {
+                        // Not directly above (e.g. approached from side) - need full navigation
+                        Vector3 miningPos = movementManager.GetBestAdjacentPosition(blockPos);
+                        if (miningPos == Vector3.zero)
+                        {
+                            deferred.Add(blockPos);
+                            skipColumn = true;
+                            continue;
+                        }
+                        yield return StartCoroutine(NavigateAndDig(blockPos, miningPos));
+                    }
                 }
                 else
                 {
@@ -180,6 +210,145 @@ public class TurtleMiningManager : MonoBehaviour
         isMining = false;
         operationManager.CompleteOperation();
         Debug.Log("Mining operation completed");
+    }
+
+    /// <summary>
+    /// Checks whether the highest blocks in the mining set are fully enclosed (no air neighbors).
+    /// If so, digs a vertical shaft from the surface down to the mining area to create access.
+    /// Picks the column in the mining set nearest to the turtle's current X,Z position.
+    /// </summary>
+    private IEnumerator DigShaftToAreaIfNeeded(List<Vector3> blocks, HashSet<Vector2Int> minedChunks)
+    {
+        if (blocks.Count == 0) yield break;
+
+        // Find the highest Y among mining blocks
+        float highestY = float.MinValue;
+        foreach (var b in blocks)
+        {
+            if (b.y > highestY) highestY = b.y;
+        }
+
+        // Check if any block at the highest Y level has an accessible neighbor
+        bool anyAccessible = false;
+        foreach (var b in blocks)
+        {
+            if (Mathf.RoundToInt(b.y) == Mathf.RoundToInt(highestY) && HasAccessibleNeighbor(b))
+            {
+                anyAccessible = true;
+                break;
+            }
+        }
+
+        if (anyAccessible)
+        {
+            Debug.Log("Mining area has accessible blocks - no shaft needed");
+            yield break;
+        }
+
+        Debug.Log("Mining area is fully enclosed - digging access shaft");
+
+        // Pick the column (X,Z) in the mining set nearest to the turtle
+        Vector3 turtlePos = baseManager.GetTurtlePosition();
+        var turtleXZ = new Vector2(turtlePos.x, turtlePos.z);
+
+        // Collect unique columns that contain the highest-Y blocks
+        var topColumns = new Dictionary<Vector2Int, float>();
+        foreach (var b in blocks)
+        {
+            var key = new Vector2Int(Mathf.RoundToInt(b.x), Mathf.RoundToInt(b.z));
+            if (!topColumns.ContainsKey(key) || b.y > topColumns[key])
+                topColumns[key] = b.y;
+        }
+
+        // Find nearest column to turtle
+        Vector2Int bestCol = default;
+        float bestDist = float.MaxValue;
+        float bestTopY = highestY;
+        foreach (var kvp in topColumns)
+        {
+            float dist = Vector2.Distance(new Vector2(kvp.Key.x, kvp.Key.y), turtleXZ);
+            if (dist < bestDist)
+            {
+                bestDist = dist;
+                bestCol = kvp.Key;
+                bestTopY = kvp.Value;
+            }
+        }
+
+        int shaftX = bestCol.x;
+        int shaftZ = bestCol.y; // Vector2Int.y is the Z coordinate
+        int targetY = Mathf.RoundToInt(bestTopY);
+
+        // Find the surface: scan upward from targetY to find the first air block
+        var worldManager = baseManager.worldManager;
+        if (worldManager == null) yield break;
+
+        int surfaceY = targetY;
+        for (int y = targetY; y < targetY + 128; y++)
+        {
+            var checkPos = new Vector3(shaftX, y, shaftZ);
+            if (!IsBlockSolidAt(checkPos))
+            {
+                surfaceY = y;
+                break;
+            }
+        }
+
+        if (surfaceY <= targetY)
+        {
+            Debug.Log("Could not find surface above mining area - shaft not needed or area is already accessible");
+            yield break;
+        }
+
+        Debug.Log($"Digging shaft at ({shaftX}, {shaftZ}) from Y={surfaceY} down to Y={targetY}");
+
+        // Move turtle to the surface entry point of the shaft
+        // Enable auto-excavation so the turtle can dig to the shaft location if needed
+        bool prevAutoExcavation = movementManager.enableAutoExcavation;
+        movementManager.enableAutoExcavation = true;
+
+        Vector3 shaftEntry = new Vector3(shaftX, surfaceY, shaftZ);
+        yield return StartCoroutine(movementManager.MoveTurtleToExactPosition(shaftEntry));
+
+        // Dig down step by step: always dig then move (more robust than checking each block)
+        for (int y = surfaceY - 1; y >= targetY; y--)
+        {
+            Vector3 blockBelow = new Vector3(shaftX, y, shaftZ);
+
+            // Always dig — if the position is already air, digdown is harmless
+            baseManager.QueueCommand(new TurtleCommand("digdown", baseManager.defaultTurtleId));
+            yield return new WaitUntil(() => !baseManager.IsBusy);
+
+            // Update world state (safe even if block was already air)
+            var chunk = worldManager.GetChunkContaining(blockBelow);
+            chunk?.RemoveBlockFromData(blockBelow);
+            TrackMinedChunk(blockBelow, minedChunks);
+
+            // Move down into the cleared space
+            baseManager.QueueCommand(new TurtleCommand("down", baseManager.defaultTurtleId));
+            yield return new WaitUntil(() => !baseManager.IsBusy);
+        }
+
+        // Restore previous auto-excavation setting
+        movementManager.enableAutoExcavation = prevAutoExcavation;
+
+        // Regenerate meshes for shaft chunks so pathfinding sees the new air
+        RegenerateMinedChunks(minedChunks);
+        minedChunks.Clear();
+
+        Debug.Log($"Access shaft complete - turtle at ({shaftX}, {targetY}, {shaftZ})");
+    }
+
+    private bool IsBlockSolidAt(Vector3 position)
+    {
+        var worldManager = baseManager.worldManager;
+        if (worldManager == null) return false;
+
+        var chunk = worldManager.GetChunkContaining(position);
+        if (chunk == null || !chunk.IsLoaded) return false;
+
+        // Use ChunkMeshData (source of truth) instead of ChunkInfo which may be incomplete
+        return chunk.HasBlockAtWorld(position);
     }
 
     private IEnumerator NavigateAndDig(Vector3 blockPosition, Vector3 miningPosition)
@@ -304,11 +473,8 @@ public class TurtleMiningManager : MonoBehaviour
             var chunk = worldManager.GetChunkContaining(neighbor);
             if (chunk == null || !chunk.IsLoaded) continue;
 
-            var chunkInfo = chunk.GetChunkInfo();
-            if (chunkInfo == null) continue;
-
-            var blockType = chunkInfo.GetBlockTypeAt(neighbor);
-            if (string.IsNullOrEmpty(blockType) || blockType.ToLowerInvariant().Contains("air"))
+            // Use ChunkMeshData (source of truth) — no block = air = accessible
+            if (!chunk.HasBlockAtWorld(neighbor))
                 return true;
         }
 

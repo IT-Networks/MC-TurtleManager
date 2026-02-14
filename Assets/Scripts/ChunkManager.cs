@@ -599,6 +599,18 @@ public class ChunkManager
     public int SubmeshCount => _mf?.sharedMesh?.subMeshCount ?? 0;
     public ChunkMeshData GetCurrentMeshData() => currentMeshData;
 
+    /// <summary>
+    /// Checks if there's a block at the given world position using ChunkMeshData (source of truth).
+    /// More reliable than ChunkInfo for block detection.
+    /// </summary>
+    public bool HasBlockAtWorld(Vector3 worldPosition)
+    {
+        if (currentMeshData == null) return false;
+        Vector3Int local = WorldToLocalPosition(worldPosition);
+        if (!IsValidLocalPosition(local)) return false;
+        return currentMeshData.HasBlock(local.x, local.y, local.z);
+    }
+
     // Thread-safe accessor for ChunkInfo
     public ChunkInfo GetChunkInfo() => chunk;
 

@@ -68,6 +68,9 @@ public class AreaSelectionManager : MonoBehaviour
     public Color invalidBlockColor = Color.gray;
     public float gizmoAlpha = 0.3f;
     
+    [Header("Auto Execute")]
+    public bool autoExecuteAfterSelection = true;
+
     [Header("Work Area Visualization")]
     public bool showWorkProgress = true;
     
@@ -260,6 +263,12 @@ public class AreaSelectionManager : MonoBehaviour
 
         selectionStart = null;
         selectionEnd = null;
+
+        // Auto-execute the operation if enabled and there are valid blocks
+        if (autoExecuteAfterSelection && validBlocks.Count > 0)
+        {
+            ExecuteSelectedOperation();
+        }
     }
     
     #endregion
