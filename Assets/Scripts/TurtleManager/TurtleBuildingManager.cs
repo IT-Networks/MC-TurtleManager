@@ -168,11 +168,17 @@ public class TurtleBuildingManager : MonoBehaviour
             blockType = blockType,
             requiresPositioning = false
         };
-        
+
         baseManager.QueueCommand(placeCmd);
-        
+
         // Wait for command execution
         yield return new WaitUntil(() => !baseManager.IsBusy);
+
+        // Update world data and regenerate mesh so the placed block appears visually
+        if (baseManager.worldManager != null)
+        {
+            baseManager.worldManager.PlaceBlockAtWorldPosition(blockPosition, blockType);
+        }
     }
 
     #endregion

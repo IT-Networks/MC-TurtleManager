@@ -8,6 +8,10 @@ using UnityEngine;
 /// </summary>
 public enum BlockModelType
 {
+    // Air MUST be 0 — arrays zero-initialize to this value, so unset cells
+    // (null blocks) are correctly treated as empty for face culling.
+    Air = 0,
+
     // === FULL BLOCKS ===
     Cube,              // Standard full block (stone, dirt, wood, etc.)
 
@@ -55,7 +59,7 @@ public enum BlockModelType
 
     // === SPECIAL ===
     Liquid,            // Water, lava (transparent block)
-    Air                // Empty/invisible block
+    // Air is defined first (= 0) so zero-initialized arrays default to Air
 }
 
 /// <summary>
@@ -64,15 +68,30 @@ public enum BlockModelType
 /// </summary>
 public static class BlockModelDetector
 {
+    // Cache: each unique block name is classified once, then O(1) dictionary lookup.
+    // A typical chunk has ~20-50 unique block names, so the cache stays tiny.
+    private static readonly System.Collections.Generic.Dictionary<string, BlockModelType> _cache =
+        new System.Collections.Generic.Dictionary<string, BlockModelType>(128);
+
     /// <summary>
-    /// Determines the appropriate model type for a given block name
-    /// Case-insensitive, supports both minecraft: and modded namespaces
+    /// Determines the appropriate model type for a given block name.
+    /// Results are cached — repeated calls with the same name are O(1).
     /// </summary>
     public static BlockModelType GetModelType(string blockName)
     {
         if (string.IsNullOrEmpty(blockName))
             return BlockModelType.Air;
 
+        if (_cache.TryGetValue(blockName, out BlockModelType cached))
+            return cached;
+
+        BlockModelType result = ClassifyBlock(blockName);
+        _cache[blockName] = result;
+        return result;
+    }
+
+    private static BlockModelType ClassifyBlock(string blockName)
+    {
         string lower = blockName.ToLowerInvariant();
 
         // === AIR & LIQUIDS ===

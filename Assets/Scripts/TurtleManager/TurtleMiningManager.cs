@@ -319,9 +319,15 @@ public class TurtleMiningManager : MonoBehaviour
             baseManager.QueueCommand(new TurtleCommand("digdown", baseManager.defaultTurtleId));
             yield return new WaitUntil(() => !baseManager.IsBusy);
 
-            // Update world state (safe even if block was already air)
+            // Update world state with immediate visual update AND proper event firing
+            // CRITICAL FIX: Use RemoveBlockAndRegenerate instead of RemoveBlockFromData + RegenerateMesh
+            // This ensures:
+            // 1. Block disappears visually (immediate)
+            // 2. OnBlockRemoved event fires (pathfinder updates)
+            // 3. OnChunkRegenerated event fires (NavMesh updates)
             var chunk = worldManager.GetChunkContaining(blockBelow);
-            chunk?.RemoveBlockFromData(blockBelow);
+            chunk?.RemoveBlockAndRegenerate(blockBelow, 10000);
+
             TrackMinedChunk(blockBelow, minedChunks);
 
             // Move down into the cleared space
@@ -393,13 +399,17 @@ public class TurtleMiningManager : MonoBehaviour
         yield return new WaitUntil(() => !baseManager.IsBusy);
 
         // Update world state: remove block from both ChunkMeshData and ChunkInfo
-        // so pathfinding knows this position is now air AND mesh regeneration
-        // won't re-add the block. No per-block mesh regen (too expensive during batch mining).
+        // Update world state with immediate visual update AND proper event firing
+        // CRITICAL FIX: Use RemoveBlockAndRegenerate to trigger OnBlockRemoved and OnChunkRegenerated events
+        // This ensures:
+        // 1. Block disappears visually (immediate)
+        // 2. OnBlockRemoved event fires (pathfinder cache invalidates)
+        // 3. OnChunkRegenerated event fires (NavMesh updates)
         var worldManager = baseManager.worldManager;
         if (worldManager != null)
         {
             var chunk = worldManager.GetChunkContaining(blockPosition);
-            chunk?.RemoveBlockFromData(blockPosition);
+            chunk?.RemoveBlockAndRegenerate(blockPosition, 10000);
         }
     }
 

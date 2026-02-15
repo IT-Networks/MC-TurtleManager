@@ -18,6 +18,10 @@ public class ChunkMeshBuilder
     // Built once at the start of BuildMeshFromData, indexed as [x, y, z].
     private BlockModelType[,,] _modelTypeGrid;
 
+    // Reused per-block visible faces array — avoids allocating bool[6] per cube block.
+    // Safe because BuildMeshFromData processes blocks sequentially on a single thread.
+    private readonly bool[] _visibleFaces = new bool[6];
+
     public ChunkMeshBuilder(ChunkUVProvider uvProvider = null)
     {
         this.uvProvider = uvProvider ?? new ChunkUVProvider(1);
@@ -29,17 +33,12 @@ public class ChunkMeshBuilder
         var submeshes = new Dictionary<string, SubmeshBuild>();
         var blockPositions = new List<(Vector3 position, string blockType)>();
 
-        // Precompute model types for all blocks in one pass.
-        // This avoids repeated GetModelType() string parsing during face culling
-        // (6 neighbor lookups per block), reducing ~180K string ops to ~65K.
+        // Pass 1: Classify every block into the model type grid.
+        // This MUST complete before pass 2 because face culling needs the full grid
+        // (e.g. block at y checks neighbor at y+1 which is visited later in the loop).
+        // GetModelType() is cached in BlockModelDetector — first call per unique name
+        // does string parsing, subsequent calls are O(1) dictionary lookup.
         _modelTypeGrid = new BlockModelType[data.chunkSize, data.maxHeight, data.chunkSize];
-        for (int px = 0; px < data.chunkSize; px++)
-            for (int py = 0; py < data.maxHeight; py++)
-                for (int pz = 0; pz < data.chunkSize; pz++)
-                {
-                    string name = data.GetBlock(px, py, pz);
-                    _modelTypeGrid[px, py, pz] = name != null ? BlockModelDetector.GetModelType(name) : BlockModelType.Air;
-                }
 
         for (int x = 0; x < data.chunkSize; x++)
         {
@@ -48,28 +47,39 @@ public class ChunkMeshBuilder
                 for (int z = 0; z < data.chunkSize; z++)
                 {
                     string blockName = data.GetBlock(x, y, z);
-                    if (blockName == null) continue;
+                    if (blockName == null) continue; // default Air (0) is correct
+                    _modelTypeGrid[x, y, z] = BlockModelDetector.GetModelType(blockName);
+                }
+            }
+        }
 
+        // Pass 2: Build meshes using the complete model type grid for face culling.
+        int coordOffsetX = data.coord.x * data.chunkSize;
+        int coordOffsetZ = data.coord.y * data.chunkSize;
+
+        for (int x = 0; x < data.chunkSize; x++)
+        {
+            for (int y = 0; y < data.maxHeight; y++)
+            {
+                for (int z = 0; z < data.chunkSize; z++)
+                {
                     BlockModelType modelType = _modelTypeGrid[x, y, z];
-
-                    // Skip turtle blocks and air
                     if (modelType == BlockModelType.Air) continue;
-                    if (IsTurtleBlock(blockName)) continue;
+
+                    string blockName = data.GetBlock(x, y, z);
+                    if (blockName.Contains("turtle")) continue;
 
                     if (!submeshes.TryGetValue(blockName, out var sb))
                         submeshes[blockName] = sb = new SubmeshBuild();
 
-                    float wx = -(data.coord.x * data.chunkSize + x);
+                    float wx = -(coordOffsetX + x);
                     float wy = y - 128;
-                    float wz = data.coord.y * data.chunkSize + z;
-
+                    float wz = coordOffsetZ + z;
                     Vector3 worldPos = new Vector3(wx, wy, wz);
 
                     blockPositions.Add((worldPos, blockName));
                     switch (modelType)
                     {
-                        case BlockModelType.Air:
-                            break;
                         case BlockModelType.CrossPlant:
                         case BlockModelType.TintedCross:
                             AddCrossPlantMesh(sb, worldPos, blockName);
@@ -150,21 +160,14 @@ public class ChunkMeshBuilder
     {
         // Non-full blocks (fences, torches, etc.) should NOT cause neighbor faces to be culled.
         // Uses precomputed _modelTypeGrid for O(1) lookups instead of string parsing.
-        return new bool[6]
-        {
-            // Front (Z+)
-            z == data.chunkSize - 1 ? !IsFullBlockInAdjacentChunk(data, x, y, z, 0, 0, 1) : !IsFullBlockType(_modelTypeGrid[x, y, z + 1]),
-            // Back (Z-)
-            z == 0 ? !IsFullBlockInAdjacentChunk(data, x, y, z, 0, 0, -1) : !IsFullBlockType(_modelTypeGrid[x, y, z - 1]),
-            // Top (Y+)
-            y == data.maxHeight - 1 || !IsFullBlockType(_modelTypeGrid[x, y + 1, z]),
-            // Bottom (Y-)
-            y == 0 || !IsFullBlockType(_modelTypeGrid[x, y - 1, z]),
-            // Left (X-)
-            x == data.chunkSize - 1 ? !IsFullBlockInAdjacentChunk(data, x, y, z, 1, 0, 0) : !IsFullBlockType(_modelTypeGrid[x + 1, y, z]),
-            // Right (X+)
-            x == 0 ? !IsFullBlockInAdjacentChunk(data, x, y, z, -1, 0, 0) : !IsFullBlockType(_modelTypeGrid[x - 1, y, z])
-        };
+        // Writes into reusable _visibleFaces array to avoid per-block allocation.
+        _visibleFaces[0] = z == data.chunkSize - 1 ? !IsFullBlockInAdjacentChunk(data, x, y, z, 0, 0, 1) : !IsFullBlockType(_modelTypeGrid[x, y, z + 1]); // Front (Z+)
+        _visibleFaces[1] = z == 0 ? !IsFullBlockInAdjacentChunk(data, x, y, z, 0, 0, -1) : !IsFullBlockType(_modelTypeGrid[x, y, z - 1]); // Back (Z-)
+        _visibleFaces[2] = y == data.maxHeight - 1 || !IsFullBlockType(_modelTypeGrid[x, y + 1, z]); // Top (Y+)
+        _visibleFaces[3] = y == 0 || !IsFullBlockType(_modelTypeGrid[x, y - 1, z]); // Bottom (Y-)
+        _visibleFaces[4] = x == data.chunkSize - 1 ? !IsFullBlockInAdjacentChunk(data, x, y, z, 1, 0, 0) : !IsFullBlockType(_modelTypeGrid[x + 1, y, z]); // Left (X-)
+        _visibleFaces[5] = x == 0 ? !IsFullBlockInAdjacentChunk(data, x, y, z, -1, 0, 0) : !IsFullBlockType(_modelTypeGrid[x - 1, y, z]); // Right (X+)
+        return _visibleFaces;
     }
 
     private static bool IsFullBlockType(BlockModelType type)
@@ -201,34 +204,33 @@ public class ChunkMeshBuilder
         return IsFullBlockType(BlockModelDetector.GetModelType(blockName));
     }
 
+    // Static cube geometry — shared across all AddCubeFaces calls (zero per-call allocation)
+    private static readonly Vector3[] CubeCorners =
+    {
+        new Vector3(-0.5f, -0.5f, -0.5f), // 0: left-bottom-back
+        new Vector3( 0.5f, -0.5f, -0.5f), // 1: right-bottom-back
+        new Vector3( 0.5f,  0.5f, -0.5f), // 2: right-top-back
+        new Vector3(-0.5f,  0.5f, -0.5f), // 3: left-top-back
+        new Vector3(-0.5f, -0.5f,  0.5f), // 4: left-bottom-front
+        new Vector3( 0.5f, -0.5f,  0.5f), // 5: right-bottom-front
+        new Vector3( 0.5f,  0.5f,  0.5f), // 6: right-top-front
+        new Vector3(-0.5f,  0.5f,  0.5f)  // 7: left-top-front
+    };
+
+    private static readonly int[,] CubeFaceVertices =
+    {
+        {4, 5, 6, 7}, // Front (Z+)
+        {1, 0, 3, 2}, // Back (Z-)
+        {7, 6, 2, 3}, // Top (Y+)
+        {0, 1, 5, 4}, // Bottom (Y-)
+        {0, 4, 7, 3}, // Left (X-)
+        {5, 1, 2, 6}  // Right (X+)
+    };
+
+    private static readonly int[] CubeFaceTriangles = { 0, 1, 2, 0, 2, 3 };
+
     private void AddCubeFaces(SubmeshBuild sb, Vector3 center, bool[] visibleFaces, string blockName)
     {
-        // Cube corner vertices
-        Vector3[] corners = new Vector3[8]
-        {
-            new Vector3(-0.5f, -0.5f, -0.5f), // 0: left-bottom-back
-            new Vector3( 0.5f, -0.5f, -0.5f), // 1: right-bottom-back
-            new Vector3( 0.5f,  0.5f, -0.5f), // 2: right-top-back
-            new Vector3(-0.5f,  0.5f, -0.5f), // 3: left-top-back
-            new Vector3(-0.5f, -0.5f,  0.5f), // 4: left-bottom-front
-            new Vector3( 0.5f, -0.5f,  0.5f), // 5: right-bottom-front
-            new Vector3( 0.5f,  0.5f,  0.5f), // 6: right-top-front
-            new Vector3(-0.5f,  0.5f,  0.5f)  // 7: left-top-front
-        };
-
-        // Face vertex indices
-        int[,] faceVertices = new int[6, 4]
-        {
-            {4, 5, 6, 7}, // Front (Z+)
-            {1, 0, 3, 2}, // Back (Z-)
-            {7, 6, 2, 3}, // Top (Y+)
-            {0, 1, 5, 4}, // Bottom (Y-)
-            {0, 4, 7, 3}, // Left (X-) 
-            {5, 1, 2, 6}  // Right (X+)
-        };
-
-        int[] faceTriangles = new int[6] { 0, 1, 2, 0, 2, 3 };
-
         for (int face = 0; face < 6; face++)
         {
             if (!visibleFaces[face]) continue;
@@ -239,7 +241,7 @@ public class ChunkMeshBuilder
             // Add vertices for this face
             for (int i = 0; i < 4; i++)
             {
-                Vector3 vertex = corners[faceVertices[face, i]] + center;
+                Vector3 vertex = CubeCorners[CubeFaceVertices[face, i]] + center;
                 sb.vertices.Add(vertex);
                 sb.uvs.Add(faceUVs[i]);
             }
@@ -247,7 +249,7 @@ public class ChunkMeshBuilder
             // Add triangle indices
             for (int i = 0; i < 6; i++)
             {
-                sb.tris.Add(startVertex + faceTriangles[i]);
+                sb.tris.Add(startVertex + CubeFaceTriangles[i]);
             }
         }
     }
@@ -290,19 +292,6 @@ public class ChunkMeshBuilder
 
         mesh.RecalculateNormals();
         mesh.RecalculateBounds();
-    }
-
-    /// <summary>
-    /// Checks if a block is a ComputerCraft turtle
-    /// Turtles are spawned separately as entities, so they should not be rendered in chunks
-    /// </summary>
-    private bool IsTurtleBlock(string blockName)
-    {
-        string lower = blockName.ToLowerInvariant();
-
-        // ComputerCraft / CC:Tweaked turtle blocks
-        // Examples: "computercraft:turtle", "computercraft:turtle_advanced", "cc:turtle"
-        return lower.Contains("turtle");
     }
 
     /// <summary>

@@ -10,7 +10,7 @@ using UnityEngine.Networking;
 public class TurtleBaseManager : MonoBehaviour
 {
     [Header("Server Settings")]
-    public string turtleCommandUrl = "http://192.168.178.211:4999/command";
+    public string turtleCommandUrl = "http://192.168.178.211:4999/commands";
     public string turtleStatusUrl = "http://192.168.178.211:4999/status";
 
     [Header("Command Settings")]

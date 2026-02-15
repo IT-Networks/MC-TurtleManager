@@ -477,7 +477,13 @@ public class ChunkManager
         // Set flag immediately to prevent TOCTOU race with concurrent callers
         isRegenerating = true;
         CoroutineHelper.Instance.StartCoroutine(RegenerateMeshCoroutine(batchVerticesPerFrame));
-        
+
+        // CRITICAL FIX: Notify block removal event immediately
+        // This ensures pathfinder cache is invalidated when blocks are removed
+        // Pathfinder subscribes to OnBlockRemoved event to clear its rasterization cache
+        // Pass null for block type since we don't track what was there
+        manager?.OnBlockRemoved?.Invoke(worldPosition, null);
+
         Debug.Log($"Chunk {coord}: Block removed at {worldPosition}, regenerating mesh");
         return true;
     }
@@ -582,8 +588,14 @@ public class ChunkManager
         // Set flag immediately to prevent TOCTOU race with concurrent callers
         isRegenerating = true;
         CoroutineHelper.Instance.StartCoroutine(RegenerateMeshCoroutine(batchVerticesPerFrame));
-        
+
         Debug.Log($"Chunk {coord}: Block '{blockType}' added at {worldPosition}, regenerating mesh");
+
+        // CRITICAL FIX: Notify block placement event immediately
+        // This ensures pathfinder cache is updated when blocks are placed
+        // Pathfinder subscribes to OnBlockPlaced event to update its navigation
+        manager?.OnBlockPlaced?.Invoke(worldPosition, blockType);
+
         return true;
     }
 
