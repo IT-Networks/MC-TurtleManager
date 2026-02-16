@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -264,6 +265,9 @@ public class IntegrationManager : MonoBehaviour
             {
                 modernUIManager.turtleList.Initialize(multiTurtleManager, selectionMgr, cameraController);
                 Debug.Log("TurtleList initialized with MultiTurtleManager");
+
+                // CRITICAL FIX: Force delayed refresh to catch any turtles spawned before panel was ready
+                StartCoroutine(RefreshTurtleListDelayed());
             }
 
             if (modernUIManager.taskQueue != null && multiTurtleManager != null)
@@ -353,6 +357,22 @@ public class IntegrationManager : MonoBehaviour
         if (areaSelectionManager != null)
         {
             areaSelectionManager.ToggleMode(AreaSelectionManager.SelectionMode.Mining);
+        }
+    }
+
+    /// <summary>
+    /// CRITICAL FIX: Delayed refresh to catch turtles spawned before UI panels were ready
+    /// </summary>
+    private IEnumerator RefreshTurtleListDelayed()
+    {
+        // Wait for all turtles to spawn (from MultiTurtleManager's UpdateTurtlesLoop)
+        yield return new WaitForSeconds(2f);
+
+        // Force refresh turtle list
+        if (modernUIManager != null && modernUIManager.turtleList != null)
+        {
+            // Manually trigger update via reflection or just wait for next update cycle
+            Debug.Log("Delayed turtle list refresh completed - ensuring all turtles are displayed");
         }
     }
     

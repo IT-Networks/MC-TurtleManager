@@ -60,6 +60,36 @@ public class ModernUIManager : MonoBehaviour
             return;
         }
         _instance = this;
+
+        // CRITICAL FIX: Configure Canvas Scaler for proper ultra widescreen support
+        FixCanvasScaling();
+    }
+
+    /// <summary>
+    /// Fixes canvas scaling to support ultra widescreen displays
+    /// </summary>
+    private void FixCanvasScaling()
+    {
+        if (mainUICanvas == null)
+        {
+            Debug.LogWarning("mainUICanvas not assigned - cannot fix canvas scaling");
+            return;
+        }
+
+        CanvasScaler scaler = mainUICanvas.GetComponent<CanvasScaler>();
+        if (scaler == null)
+        {
+            Debug.LogWarning("CanvasScaler component not found on mainUICanvas");
+            return;
+        }
+
+        // Configure for Scale With Screen Size mode
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920, 1080); // Full HD reference
+        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+        scaler.matchWidthOrHeight = 0.5f; // Balance between width and height
+
+        Debug.Log($"Canvas Scaler fixed: Scale With Screen Size mode, Reference: 1920x1080");
     }
 
     private void Start()
@@ -87,6 +117,9 @@ public class ModernUIManager : MonoBehaviour
         if (aiPrompt == null)
             aiPrompt = GetComponentInChildren<AIPromptPanel>();
 
+        // CRITICAL FIX: Setup Safe Area support for notched devices and ultra wide screens
+        SetupSafeArea();
+
         // Initially hide panels
         if (contextMenuPanel != null)
             contextMenuPanel.SetActive(false);
@@ -96,6 +129,51 @@ public class ModernUIManager : MonoBehaviour
 
         if (aiPromptPanel != null)
             aiPromptPanel.SetActive(false);
+    }
+
+    /// <summary>
+    /// Sets up Safe Area support for notched devices and ultra widescreen displays
+    /// Ensures UI elements stay within visible screen area
+    /// </summary>
+    private void SetupSafeArea()
+    {
+        if (mainUICanvas == null)
+        {
+            Debug.LogWarning("mainUICanvas not assigned - cannot setup safe area");
+            return;
+        }
+
+        // Get safe area from screen
+        Rect safeArea = Screen.safeArea;
+
+        // Convert to normalized coordinates (0-1)
+        Vector2 anchorMin = new Vector2(safeArea.x / Screen.width, safeArea.y / Screen.height);
+        Vector2 anchorMax = new Vector2((safeArea.x + safeArea.width) / Screen.width,
+                                         (safeArea.y + safeArea.height) / Screen.height);
+
+        // Apply safe area to all RectTransforms in UI
+        RectTransform[] allRects = mainUICanvas.GetComponentsInChildren<RectTransform>(true);
+        int fixedCount = 0;
+
+        foreach (RectTransform rect in allRects)
+        {
+            // Skip the canvas itself
+            if (rect.parent == null) continue;
+
+            // Clamp anchors to safe area
+            rect.anchorMin = new Vector2(
+                Mathf.Clamp(rect.anchorMin.x, anchorMin.x, anchorMax.x),
+                Mathf.Clamp(rect.anchorMin.y, anchorMin.y, anchorMax.y)
+            );
+            rect.anchorMax = new Vector2(
+                Mathf.Clamp(rect.anchorMax.x, anchorMin.x, anchorMax.x),
+                Mathf.Clamp(rect.anchorMax.y, anchorMin.y, anchorMax.y)
+            );
+
+            fixedCount++;
+        }
+
+        Debug.Log($"Safe area setup: {safeArea} (normalized: min={anchorMin}, max={anchorMax}), Fixed {fixedCount} UI elements");
     }
 
     private void SetupReferences()

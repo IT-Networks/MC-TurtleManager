@@ -52,11 +52,21 @@ public class MultiTurtleManager : MonoBehaviour
         // Create prefab as child of this manager (hidden template)
         turtlePrefab = new GameObject("TurtlePrefab_Template");
         turtlePrefab.transform.SetParent(transform);
+
+        // Add turtle components
         turtlePrefab.AddComponent<TurtleObject>();
         turtlePrefab.AddComponent<TurtleVisualizer>();
+
+        // Add manager components to the same GameObject (so they can use GetComponent to find each other)
+        turtlePrefab.AddComponent<TurtleBaseManager>();
+        turtlePrefab.AddComponent<TurtleMovementManager>();
+        turtlePrefab.AddComponent<TurtleMiningManager>();
+        turtlePrefab.AddComponent<TurtleBuildingManager>();
+        turtlePrefab.AddComponent<TurtleOperationManager>();
+
         turtlePrefab.SetActive(false);
 
-        Debug.Log("Created default turtle prefab template (hidden)");
+        Debug.Log("Created default turtle prefab template (hidden) with manager components");
     }
 
     private IEnumerator UpdateTurtlesLoop()
@@ -200,20 +210,11 @@ public class MultiTurtleManager : MonoBehaviour
 
     private void SetupTurtleManagers(GameObject turtleObj, int turtleId)
     {
-        // Add base manager
-        var baseManager = turtleObj.AddComponent<TurtleBaseManager>();
-        baseManager.defaultTurtleId = turtleId.ToString();
+        // NOTE: Manager scripts are already created by IntegrationManager
+        // as children of TurtleMainController. No need to create additional manager objects here.
+        // Turtle managers use FindFirstObjectByType in their Start() methods to find the global managers.
 
-        // Add other managers as needed
-        turtleObj.AddComponent<TurtleMovementManager>();
-
-        // Add mining manager
-        turtleObj.AddComponent<TurtleMiningManager>();
-
-        turtleObj.AddComponent<TurtleBuildingManager>();
-        turtleObj.AddComponent<TurtleOperationManager>();
-
-        Debug.Log($"Turtle {turtleId}: Added managers");
+        Debug.Log($"Turtle {turtleId}: Using global manager scripts from IntegrationManager");
     }
 
     private void UpdateTurtle(int turtleId, TurtleStatus status)

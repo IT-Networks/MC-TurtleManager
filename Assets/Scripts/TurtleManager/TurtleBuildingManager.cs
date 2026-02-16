@@ -45,8 +45,17 @@ public class TurtleBuildingManager : MonoBehaviour
         currentStructure = structure;
 
         Debug.Log($"Starting building operation: {structure.name} at {buildOrigin} ({structure.blocks.Count} blocks)");
-        
+
         operationManager.StartOperation(TurtleOperationManager.OperationType.Building, structure.blocks.Count);
+
+        // CRITICAL FIX: Update turtle object with current operation for UI display
+        // Managers are on the same GameObject as TurtleObject (via MultiTurtleManager prefab)
+        TurtleObject turtleObj = GetComponent<TurtleObject>();
+        if (turtleObj != null)
+        {
+            turtleObj.SetBusy(true, TurtleOperationManager.OperationType.Building);
+        }
+
         StartCoroutine(ExecuteBuildingOperation());
     }
 

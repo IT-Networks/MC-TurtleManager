@@ -62,6 +62,15 @@ public class TurtleMiningManager : MonoBehaviour
 
         Debug.Log($"Mining {optimizedBlocks.Count} blocks in {CountColumns(blockPositions)} columns");
         operationManager.StartOperation(TurtleOperationManager.OperationType.Mining, optimizedBlocks.Count);
+
+        // CRITICAL FIX: Update turtle object with current operation for UI display
+        // Managers are on the same GameObject as TurtleObject (via MultiTurtleManager prefab)
+        TurtleObject turtleObj = GetComponent<TurtleObject>();
+        if (turtleObj != null)
+        {
+            turtleObj.SetBusy(true, TurtleOperationManager.OperationType.Mining);
+        }
+
         StartCoroutine(ExecuteMiningOperation(optimizedBlocks));
     }
 

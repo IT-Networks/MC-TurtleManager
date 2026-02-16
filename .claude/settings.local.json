@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(git checkout:*)",
-      "Bash(dotnet build:*)"
+      "Bash(dotnet build:*)",
+      "Bash(/mnt/c/Program Files/Unity/Hub/Editor/2022.3.23f1/Editor/Unity.exe:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)"
     ]
   }
 }
