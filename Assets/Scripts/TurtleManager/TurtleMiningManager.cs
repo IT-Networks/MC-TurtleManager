@@ -106,8 +106,11 @@ public class TurtleMiningManager : MonoBehaviour
                 RegenerateMinedChunks(minedChunks);
                 minedChunks.Clear();
 
+                // CRITICAL FIX: Re-optimize remaining blocks by columns
+                // Previous code set remaining = deferred directly without re-optimization
+                // This broke column-based order when processing deferred blocks
                 remaining = OptimizeByColumns(remaining);
-                Debug.Log($"Retry pass {pass + 1}: {remaining.Count} deferred blocks");
+                Debug.Log($"Retry pass {pass + 1}: {remaining.Count} deferred blocks, re-optimized by columns");
             }
 
             var deferred = new List<Vector3>();
@@ -456,10 +459,43 @@ public class TurtleMiningManager : MonoBehaviour
 
         if (recovered.Count > 0)
         {
-            // Re-sort recovered blocks into columns (top-down)
-            recovered.Sort((a, b) => b.y.CompareTo(a.y));
-            remaining.InsertRange(insertIndex, recovered);
-            Debug.Log($"Intra-pass retry: {recovered.Count} deferred blocks now reachable");
+            // CRITICAL FIX: Re-sort recovered blocks into proper column order
+            // Previous code only sorted by Y (top-down) which breaks column-based mining
+            // Proper approach: Sort by columns first, then top-down within each column
+
+            // Group recovered blocks by column (X,Z)
+            var columns = new Dictionary<Vector2Int, List<Vector3>>();
+            foreach (var block in recovered)
+            {
+                var key = new Vector2Int(Mathf.RoundToInt(block.x), Mathf.RoundToInt(block.z));
+                if (!columns.ContainsKey(key))
+                    columns[key] = new List<Vector3>();
+                columns[key].Add(block);
+            }
+
+            // Sort blocks within each column: top-down (highest Y first)
+            foreach (var col in columns.Values)
+                col.Sort((a, b) => b.y.CompareTo(a.y));
+
+            // Sort columns by nearest to turtle
+            Vector3 turtlePos = baseManager.GetTurtlePosition();
+            var current = new Vector2Int(Mathf.RoundToInt(turtlePos.x), Mathf.RoundToInt(turtlePos.z));
+            var remainingCols = new List<Vector2Int>(columns.Keys);
+            var orderedRecovered = new List<Vector3>();
+
+            while (remainingCols.Count > 0)
+            {
+                remainingCols.Sort((a, b) =>
+                    Vector2Int.Distance(a, current).CompareTo(Vector2Int.Distance(b, current)));
+
+                var nearest = remainingCols[0];
+                remainingCols.RemoveAt(0);
+                orderedRecovered.AddRange(columns[nearest]);
+                current = nearest;
+            }
+
+            remaining.InsertRange(insertIndex, orderedRecovered);
+            Debug.Log($"Intra-pass retry: {recovered.Count} deferred blocks now reachable, sorted by columns");
         }
     }
 
